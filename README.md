@@ -1,10 +1,9 @@
-# TOTAL MAYHEM  (Milestone 2: Crumble Floor)
+# TOTAL MAYHEM  (Milestone 3: four minigames)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
-silly minigames. **This milestone contains one complete minigame, "Crumble
-Floor", played in three twisted versions per match.** More minigames come in
-Milestone 3.
+silly minigames. **This version has four minigames: "Crumble Floor" (on seven
+different floors), "Gold Grab", "Hot Potato" and "Hill Hustle".** A match mixes them.
 
 ---
 
@@ -36,12 +35,33 @@ Stop the server with `Ctrl+C` in the terminal.
 |---|---|
 | Move | `W A S D` or arrow keys |
 | **Jump** | `Space` |
-| Shove (or drop goo, when you are a ghost) | `E` or `Shift` |
+| Shove (also: pass the bomb in Hot Potato; drop goo when you are a Crumble Floor ghost) | `E` or `Shift` |
 | Mute / unmute | `M` |
 
 ---
 
-## 3. How a round works
+## 3. How a match works
+
+A match is **3 rounds** (the host can choose 1, 3 or 5 in the lobby). Every round is a
+different minigame: all four minigames get played once before any is repeated, the same
+minigame is never played twice in a row, and round 1 always uses a minigame's normal
+version (later rounds get a random twist, such as a different floor). After the last
+round there is a final scoreboard, and the host can click **Play again** without anybody
+leaving the room.
+
+**Points per round** are the same for every minigame: 1st place gets 10 and the rest scale
+down by finishing order (with 8 players: 10, 9, 8, 6, 5, 4, 3, 1). Players who tie share a
+place. Anybody who leaves mid-round gets 0 for that round.
+
+**Rules that apply everywhere (fairness):**
+* Shove has a 1.4 second cooldown and a short range in front of you. Whoever you hit is dizzy
+  for a moment and **cannot be shoved again for 1 second**, so nobody gets bullied repeatedly.
+* **Nobody is knocked out of the match.** In Crumble Floor you become a goo-dropping ghost;
+  in the other games everybody plays the full round.
+* In the open-arena games, **jumping dodges a shove** (you cannot be hit while in the air).
+* The games help whoever is behind (see each game below).
+
+### Crumble Floor (Survival)
 
 * **Tiles crack, then fall.** The floor erodes faster and faster. Stand on a
   cracking tile too long and it drops you.
@@ -50,26 +70,56 @@ Stop the server with `Ctrl+C` in the terminal.
   not. You land with a small squash, and if you land on a hole you fall.
   (There is a tiny grace period for jumping just after running off an edge, and
   a jump pressed a hair too early still counts.)
-* **Shove rivals** toward the edge. Shove has a 1.4 second cooldown, a short
-  range in front of you, and the player you hit is dizzy for a moment and
-  **cannot be shoved again for 1 second** - nobody gets bullied repeatedly.
-  You can also jump over other players.
+* **Shove rivals** toward the edge. You can also jump over other players.
 * **Fell? You become a ghost.** You are never fully out. Ghosts float anywhere
   and press `E` to drop up to 3 goo puddles. A puddle shows a dashed warning
   ring for 0.7 seconds, then slows anyone who steps in it (jump over it to
   avoid it). You cannot be splatted again for 3 seconds. Goo never eliminates
   anybody.
-* **Points per round:** 1st place gets 10, and the rest scale down by finishing
-  order (with 8 players: 10, 9, 8, 6, 5, 4, 3, 1). **Shoving someone off the edge
-  gives +2** (they must fall within 3 seconds of your shove; max 3 KOs counted).
-  Players who survive until the 75 second limit tie for first.
-* **A match is 3 rounds** (you can choose 1, 3 or 5 in the lobby): Classic,
-  *Rush Hour* (faster crumbling), and *Butter Mode* (everything is slippery).
-  Then a final scoreboard, and the host can click **Play again** without anybody
-  leaving the room.
+* **Extra points:** shoving someone off the edge gives **+2** (they must fall within
+  3 seconds of your shove; max 3 KOs counted). Players who survive until the 75 second
+  limit tie for first.
+* **Seven floors:**
+  * *Crumble Floor* - the classic.
+  * *Rush Hour* - faster crumbling.
+  * *Butter Mode* - everything is slippery.
+  * *Lava Lounge* - faster crumbling, with glowing cracks.
+  * *Moonbase* - low gravity: floaty jumps that go further.
+  * *Candy Crumble* - a slower, friendlier collapse.
+  * *Swamp Stomp* - heavy boots: harder to steer, shoves slide you less.
+
+### Gold Grab (Collecting) - 60 seconds
+
+* Coins pop up around the arena; **run over them to collect**. Most coins at the end wins.
+* **Shove a rival and they drop up to 3 coins**, which scatter. The victim cannot re-grab
+  those coins for 1.2 seconds, so you get the first chance.
+* A big **JACKPOT coin (worth 5)** appears every so often and disappears if nobody takes
+  it. **It always appears closer to whoever is in last place** (the comeback rule).
+* You cannot grab coins while you are in the air.
+* Two versions: *Gold Grab* and *Jackpot Jam* (fewer coins, bigger and more frequent jackpots).
+
+### Hot Potato (Tag) - 60 seconds
+
+* One player carries a **ticking bomb** (it shows a countdown). If you are holding it,
+  **shove someone to pass it on**. When the fuse runs out it goes BOOM: one "boom" for the
+  holder, a stun, and a shockwave that knocks nearby players away.
+* **Fewest booms wins** (ties: whoever held the bomb for less time). Nobody is eliminated.
+* The next bomb always goes to a player with the **fewest booms so far** (the comeback rule).
+* You cannot be handed the bomb straight back (0.9 second protection), and a jump dodges a pass.
+  The fuse gets a little shorter as the round goes on, and the holder runs a bit faster.
+* Two versions: *Hot Potato* and *Ice Rink* (slippery floor).
+
+### Hill Hustle (King of the Hill) - 60 seconds
+
+* A glowing **hill** sits in the arena. **Stand on it ALONE to score** (one point per second).
+  If two or more players are on it, **nobody scores**, so shove the others off!
+* The hill **hops to a new spot every 12 seconds**, with a "NEXT" ring shown 2 seconds ahead.
+* Most hill time wins. Being in the air does not count as being on the hill. Shoves are a
+  little stronger in this game.
+* Two versions: *Hill Hustle* and *Moving Day* (the hill moves every 7 seconds, low gravity).
 
 At the end of every round, the results screen hands out silly titles such as
-"Gravity's Favorite", "Absolute Menace" or "Forgot Jumping Exists".
+"Gravity's Favorite", "Coin Goblin", "Human Firework" or "King of the Hill".
 
 ---
 
@@ -103,7 +153,7 @@ There are four different levels of "multiplayer", and it matters which one you a
 
 Tick these off yourself (I tested the same flows with automated tests, but nothing replaces eyes and fingers):
 
-- [ ] Title screen shows, hat and colour pickers change the character
+- [ ] Title screen shows; the colour swatches (12), hat arrows (16 hats) and skin arrows (8 body patterns) change the character
 - [ ] "Create a room" gives a 4-letter code and a lobby
 - [ ] Second window joins with the code and appears in the first window's lobby
 - [ ] "Copy invite link" copies a link; opening it pre-fills the code
@@ -121,6 +171,10 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 - [ ] Refresh the page mid-match: you come back into the same room
 - [ ] Close one window mid-round: the other player's round still finishes
 - [ ] Join a room *during* a round: you watch, then play the next round
+- [ ] Gold Grab: coins spin and disappear when you run over them (and you hear a "ding"); a shove makes the victim's coins pop out; the big jackpot coin shows a shrinking ring
+- [ ] Hot Potato: the bomb appears next to one player with a countdown that flashes faster near the end; shoving passes it ("TAG!"); BOOM shakes the screen; a jump dodges the shove
+- [ ] Hill Hustle: standing alone on the hill makes it your colour with a crown; two players turn it red; a "NEXT" ring appears before it hops
+- [ ] The top-right pill and the score chips make sense in each game (coins / booms / seconds)
 - [ ] Press `M`: sound toggles
 
 ---
@@ -131,16 +185,23 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **43 automated tests** (about 15 seconds):
+runs **89 automated tests** (about 20 seconds):
 
-* `tests/game.test.js` (26 tests) - the Crumble Floor rules: standing, falling,
+* `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
   airborne, jump buffering, shove range/cone/cooldown/immunity, KO credit, ghosts and
-  goo, scoring and ties, disconnects, hostile inputs, and 12 randomized full rounds.
-* `tests/network.test.js` (17 tests) - a real server with real WebSocket clients: rooms,
+  goo, scoring and ties, disconnects, hostile inputs, the seven floors, and 21 randomized full rounds.
+* `tests/minigames.test.js` (42 tests) - the shared arena rules and the three new minigames:
+  coins (pickup, drops, cap, lock, jackpot catch-up rule), the bomb (pass, no hand-back, jump
+  dodge, boom, fairest next holder, holder leaving, solo practice, nobody eliminated), the hill
+  (alone vs contested, warning and hop, staying inside the arena), the countdown, walls,
+  shove rules, hostile inputs, players leaving, fuzzed full rounds for every game and
+  variant, and the match schedule.
+* `tests/network.test.js` (19 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
-  reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety.
+  reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety, and
+  a 5-round match that mixes every minigame over the network.
 
 (There is one more test: I also loaded the real web page and its JavaScript in a
 simulated browser and clicked through the whole game. That harness is not part of
@@ -186,18 +247,23 @@ total-mayhem/
     games/
       index.js            the list of minigames + which ones a match plays
       crumbleFloor.js     ALL the rules of Crumble Floor (tuning numbers are at the top)
+      arenaBase.js        shared code for the open-arena games: movement, jump, shove, results
+      goldGrab.js         ALL the rules of Gold Grab
+      hotPotato.js        ALL the rules of Hot Potato
+      hillHustle.js       ALL the rules of Hill Hustle
   public/                 everything the browser downloads
     index.html            the screens
     style.css             colours and layout of menus
     js/
       main.js             connects everything: screens, snapshots, effects, HUD
-      renderer.js         draws characters, hats, tiles, goo, particles (no image files!)
-      constants.js        colours, hat names, themes
+      renderer.js         draws characters, hats, tiles, coins, bomb, hill, goo, particles (no image files!)
+      constants.js        colours, skin names, hat names, floor themes
       audio.js            synthesized placeholder sound effects
       input.js            keyboard handling
       net.js              Socket.IO wrapper + saved seat
   tests/
-    game.test.js          rules tests
+    game.test.js          Crumble Floor rules tests
+    minigames.test.js     Gold Grab / Hot Potato / Hill Hustle + schedule tests
     network.test.js       multiplayer tests
 ```
 
@@ -208,8 +274,38 @@ total-mayhem/
 * **How the character feels** (speed, jump height, gravity, shove strength and
   cooldown, goo): the `TUNING` block at the top of `server/games/crumbleFloor.js`.
   Example: `jumpSpeed: 430` -> `520` makes jumps higher and longer.
+* **The other minigames' numbers:** the `TUNING` and `VARIANTS` blocks at the top of
+  `goldGrab.js` (coin cap, jackpot timing, how many coins a shove drops), `hotPotato.js`
+  (fuse length, pass protection, shockwave) and `hillHustle.js` (hill size, how often it
+  hops). The shared feel (speed, jump, shove) is the `TUNING` block in `arenaBase.js`.
 * **Match length / number of players / intro and results duration:** `server/config.js`.
-* **Colours, hats, themes:** `public/js/constants.js` and the drawing code in `public/js/renderer.js`.
+* **Colours, hats, skins, floor looks:** names and colours are in `public/js/constants.js`;
+  the drawing code (`drawHat`, `drawSkin`, `drawTileDeco`) is in `public/js/renderer.js`.
+  If you add a hat or skin, also raise `HAT_COUNT` / `SKIN_COUNT` (and `COLOR_COUNT`
+  for colours) in `server/config.js`, because the server range-checks those numbers.
+* **Adding a floor:** add an entry to `VARIANTS` in `server/games/crumbleFloor.js`
+  (name, tagline, speed multipliers, a `theme` name; optional `gravity` / `jump`
+  multipliers) and a matching theme in `THEMES` in `public/js/constants.js`.
+  It is added to the match schedule automatically.
+
+### Adding another minigame (how the framework works)
+
+Every minigame is one file in `server/games/` that offers the same small set of functions
+(see the comment at the top of `arenaBase.js`). The rooms, lobby, scoring, results screen and
+network code never need to know which game is running. To add one:
+
+1. Copy `goldGrab.js` (or `hillHustle.js`) to `server/games/yourGame.js`. It extends
+   `ArenaGame`, so movement, jumping, shoving, the countdown and the results table are
+   already done. You fill in the blanks: `_update()` (what happens every tick),
+   `_rankKey()` (who is winning), `_detail()` (the text on the results screen),
+   `_titles()` (funny titles) and what to include in the snapshot.
+2. Give it a `VARIANTS` table (name, tagline, theme, small rule tweaks) and a `GAME_ID`.
+3. Register it in `server/games/index.js` (one line in `GAMES`). Its variants join the
+   match schedule automatically.
+4. In the browser, add a small drawing function for its objects in `public/js/renderer.js`
+   (see `drawArenaGame`) and, if it has new events, a `case` in `handleEvents` in
+   `public/js/main.js`. Everything else (HUD, chips, results) already works.
+5. Add tests in `tests/minigames.test.js`, then run `npm test`.
 
 After changing a server file, stop the server (`Ctrl+C`) and run `npm start` again.
 (`npm run dev` restarts automatically for you.) Changes to files in `public/` only need a browser refresh.
@@ -239,7 +335,7 @@ in Milestone 6, not as tested instructions:
 
 Nothing is saved on the server and there are no accounts. What exists today:
 
-* Your name, colour and hat are remembered in your browser (`localStorage`).
+* Your name, colour, hat and skin are remembered in your browser (`localStorage`).
 * Scores last for the match only.
 
 When we add achievements and cosmetic unlocks (Milestone 5), the options are:
@@ -270,14 +366,24 @@ duties). My recommendation is to start with `localStorage`.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 43 automated tests pass (and I ran the rules tests repeatedly to check they are not flaky).
+* All 46 automated tests pass (and I ran the rules tests repeatedly to check they are not flaky).
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
   keyboard input reaching the server (move and jump), results, final scoreboard, play again,
   back to lobby, reconnect after a dropped connection, and leave.
-* The renderer draws every hat/colour/mood combination without errors, and I looked at
-  rendered frames of all three themes to check the visuals.
+* The renderer draws every hat/colour/skin/mood combination without errors, and I looked at
+  rendered images of all 16 hats, all 8 skins (on a light and a dark colour) and frames of
+  every floor to check the visuals. I have NOT seen them move in a real browser.
+* The three new minigames were played by random "bot" inputs thousands of times (all
+  variants, 1-8 players) and always finished with valid results; their rules are covered by
+  the tests above. The real page also played a 3-round Gold Grab, Hot Potato, Hill Hustle
+  match in the simulated browser, and I looked at rendered images of every game.
+* The new floors' *feel* (Moonbase jump height, Swamp Stomp steering, how fast Lava Lounge
+  collapses) is untuned: the tests prove they run and finish, not that they are fun.
+* **The balance of the new minigames is untested by humans**: how many coins spawn, how
+  long the bomb fuse is, how big the hill is, how strong shoves are. These are first guesses
+  and need a few real play sessions to tune.
 
 **Not verified (please check these yourself):**
 * I could not open the game in a real browser, so I have **not** felt the controls,
@@ -288,7 +394,7 @@ duties). My recommendation is to start with `localStorage`.
 * Real internet play (nothing is deployed).
 
 **Known limitations in this milestone:**
-* Only one minigame (in three variants). Milestone 3 adds more.
+* Four minigames so far. More can be added with the steps in section 6.
 * Keyboard only; no touch/gamepad controls.
 * No bots, so solo testing means an idle second window.
 * Your own movement waits for the server's answer (a few milliseconds on a home
@@ -304,8 +410,8 @@ duties). My recommendation is to start with `localStorage`.
 | Milestone | Status |
 |---|---|
 | 1. Design decisions | Done: top-down 2D, Node + Socket.IO, server-authoritative, up to 8 players |
-| 2. First playable minigame | **This version** (and it is already networked, see the reordering note below) |
-| 3. Minigame framework + 2 more minigames (e.g. Parcel Panic, Flip Orders) | Next. The framework seed exists in `server/games/`. |
+| 2. First playable minigame | Done (and it is already networked, see the reordering note below) |
+| 3. Minigame framework + more minigames | **This version**: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle |
 | 4. Online multiplayer hardening | Mostly done early; remaining: deployment testing, stress tests |
 | 5. Sabotage variety, achievements, cosmetic unlocks | Planned |
 | 6. Polish, prediction, touch controls, deployment guide | Planned |

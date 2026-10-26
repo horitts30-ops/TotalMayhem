@@ -396,9 +396,10 @@ test('every variant can be described and played', () => {
 });
 
 test('full random rounds always finish with valid results (fuzz)', () => {
-  for (let trial = 0; trial < 12; trial++) {
+  for (let trial = 0; trial < 21; trial++) {
     const n = 1 + (trial % 8);
-    const variant = ['classic', 'speedy', 'slippery'][trial % 3];
+    const ids = Object.keys(CrumbleFloor.VARIANTS);
+    const variant = ids[trial % ids.length];
     const parts = [];
     for (let i = 0; i < n; i++) parts.push({ id: `b${i}`, name: `Bot ${i}` });
     const g = new CrumbleFloor(parts, variant);
@@ -430,4 +431,37 @@ test('full random rounds always finish with valid results (fuzz)', () => {
       assert.ok(r.place >= 1 && r.place <= n);
     }
   }
+});
+
+test('there are at least 7 floors and each has a name, tagline and theme', () => {
+  const ids = Object.keys(CrumbleFloor.VARIANTS);
+  assert.ok(ids.length >= 7, `floors: ${ids.length}`);
+  assert.equal(ids[0], 'classic', 'classic stays first');
+  for (const id of ids) {
+    const d = CrumbleFloor.describe(id);
+    assert.ok(d.name && d.tagline && d.theme, id);
+  }
+});
+
+test('Moonbase: floatier jump (longer in the air, further, still not absurdly high)', () => {
+  const airtime = (variant) => {
+    const g = makeGame(2, variant);
+    const a = g.players.get('p1');
+    place(a, 300, 4 * TILE + 32);
+    g.setInput('p1', { mx: 0, my: 0, jump: true, shove: false });
+    g.tick(DT);
+    g.setInput('p1', { mx: 0, my: 0, jump: false, shove: false });
+    let t = DT;
+    let peak = 0;
+    while (a.z > 0 && t < 3) {
+      peak = Math.max(peak, a.z);
+      g.tick(DT);
+      t += DT;
+    }
+    return { t, peak };
+  };
+  const normal = airtime('classic');
+  const moon = airtime('moon');
+  assert.ok(moon.t > normal.t * 1.2, `moon ${moon.t.toFixed(2)}s vs normal ${normal.t.toFixed(2)}s`);
+  assert.ok(moon.peak < 110, `moon peak ${moon.peak.toFixed(0)}px`);
 });

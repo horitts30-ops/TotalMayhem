@@ -13,7 +13,15 @@ const { createGameServer } = require('../server/app');
 async function startServer(config = {}, gameOptions = {}) {
   const server = createGameServer({
     quiet: true,
-    config: { INTRO_MS: 150, RESULTS_MS: 250, ROUND_END_DELAY_MS: 100, ...config },
+    config: {
+      INTRO_MS: 150,
+      RESULTS_MS: 250,
+      ROUND_END_DELAY_MS: 100,
+      // Pin the schedule so these tests always play Crumble Floor (the match
+      // schedule itself is random and has its own tests).
+      SCHEDULE_OVERRIDE: [{ game: 'crumbleFloor', variant: 'classic' }],
+      ...config,
+    },
     gameOptions,
   });
   const port = await server.start(0, '127.0.0.1');
@@ -127,14 +135,26 @@ test('names are cleaned and cosmetics are range-checked', async () => {
       name: '  <b>Eve</b>\u0000\u0007 with an extremely long name  ',
       color: 9999,
       hat: -5,
+      skin: 12345,
     });
     assert.equal(r.ok, true);
     await until(() => a.state, 2000, 'state');
     const me = a.state.players[0];
     assert.ok(me.name.length <= 14);
     assert.ok(!/[<>\u0000-\u001f]/.test(me.name));
-    assert.ok(me.color >= 0 && me.color <= 7);
-    assert.ok(me.hat >= 0 && me.hat <= 6);
+    assert.ok(me.color >= 0 && me.color <= 11);
+    assert.ok(me.hat >= 0 && me.hat <= 15);
+    assert.ok(Number.isInteger(me.skin) && me.skin >= 0 && me.skin <= 7);
+
+    // Valid choices go through, junk is ignored or clamped.
+    a.emit('room:customize', { color: 11, hat: 15, skin: 3 });
+    await until(() => a.state.players[0].hat === 15, 2000, 'cosmetics change');
+    assert.equal(a.state.players[0].color, 11);
+    assert.equal(a.state.players[0].skin, 3);
+    a.emit('room:customize', { color: 'red', hat: {}, skin: [1, 2] });
+    await sleep(100);
+    assert.ok(a.state.players[0].skin >= 0 && a.state.players[0].skin <= 7);
+    assert.ok(a.state.players[0].hat >= 0 && a.state.players[0].hat <= 15);
 
     const blank = await mk();
     const r2 = await ask(blank, 'room:create', { name: '   ' });
@@ -436,4 +456,69 @@ test('duplicate / repeated messages cannot create duplicate rooms or double-scor
     const me = a.state.final.standings[0];
     assert.ok(me.score <= 12, `score is bounded by one round's maximum (got ${me.score})`);
   });
+});
+
+test('a match can mix minigames: every game type runs over the network and scores come from the server', async () => {
+  const schedule = [
+    { game: 'crumbleFloor', variant: 'moon' },
+    { game: 'goldGrab', variant: 'classic' },
+    { game: 'hotPotato', variant: 'icy' },
+    { game: 'hillHustle', variant: 'moving' },
+    { game: 'goldGrab', variant: 'jackpot' },
+  ];
+  await withServer({ SCHEDULE_OVERRIDE: schedule, ALLOWED_ROUNDS: [1, 3, 5] }, { timeScale: 25 }, async ({ mk }) => {
+    const host = await mk();
+    const guest = await mk();
+    const { code } = await ask(host, 'room:create', { name: 'Host' });
+    await ask(guest, 'room:join', { code, name: 'Guest' });
+    assert.equal((await ask(host, 'room:rounds', 5)).ok, true);
+    await until(() => host.state.players.length === 2, 2000, 'both joined');
+    assert.equal((await ask(host, 'match:start', null)).ok, true);
+
+    const seen = [];
+    let lastRound = 0;
+    const started = Date.now();
+    while (host.state.phase !== 'final' && Date.now() - started < 40000) {
+      if (host.state.phase === 'intro' && host.state.round !== lastRound) {
+        lastRound = host.state.round;
+        seen.push(host.state.intro.gameId + ':' + host.state.intro.variantId);
+        // the intro card carries what the client needs for every game
+        assert.ok(host.state.intro.name && host.state.intro.instructions.length >= 3);
+        assert.ok(host.state.arena.maxTime > 0);
+      }
+      if (host.state.phase === 'playing') {
+        host.emit('game:input', { mx: Math.random() * 2 - 1, my: Math.random() * 2 - 1, jump: Math.random() < 0.2, shove: Math.random() < 0.3 });
+      }
+      await sleep(20);
+    }
+    assert.equal(host.state.phase, 'final', 'the match finished');
+    assert.deepEqual(seen, schedule.map((s) => s.game + ':' + s.variant));
+
+    // every kind of game sent snapshots with the shared player fields
+    const gids = new Set(host.snaps.map((s) => s.gid).filter(Boolean));
+    assert.ok(gids.size >= 1);
+    const f = host.state.final;
+    assert.equal(f.standings.length, 2);
+    assert.ok(f.standings.reduce((n, s) => n + s.score, 0) >= 5 * 2, 'every round awarded points');
+    assert.deepEqual(guest.state.final, host.state.final);
+  });
+});
+
+test('each new minigame sends the snapshot fields the browser draws', async () => {
+  for (const [game, key] of [['goldGrab', 'cn'], ['hotPotato', 'bomb'], ['hillHustle', 'zone']]) {
+    await withServer({ SCHEDULE_OVERRIDE: [{ game, variant: 'classic' }] }, { timeScale: 8 }, async ({ mk }) => {
+      const host = await mk();
+      await ask(host, 'room:create', { name: 'Solo' });
+      await ask(host, 'room:rounds', 1);
+      assert.equal((await ask(host, 'match:start', null)).ok, true);
+      await until(() => host.state.phase === 'playing' && host.snaps.some((s) => s.t > 2), 8000, `${game} running`);
+      const snap = host.snaps[host.snaps.length - 1];
+      assert.equal(snap.gid, game);
+      assert.ok(key in snap, `${game} snapshot has "${key}"`);
+      assert.equal(typeof snap.hud, 'string');
+      const me = snap.ps[0];
+      for (const f of ['x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'st', 'sh', 'im', 'sn', 'cd', 'rs']) assert.ok(f in me, `${game} player field ${f}`);
+      assert.equal(host.state.intro.gameId, game);
+    });
+  }
 });

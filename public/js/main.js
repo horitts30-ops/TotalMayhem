@@ -14,7 +14,7 @@ import { socket, request, saveSession, loadSession, clearSession } from './net.j
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
-import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS } from './constants.js';
+import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS } from './constants.js';
 
 const $ = (id) => document.getElementById(id);
 const INTERP_MS = 100; // other players are drawn this far in the past, for smoothness
@@ -26,7 +26,7 @@ const S = {
   view: 'title',
   phaseEndsAt: 0,
   snaps: [], // recent world snapshots: { r: receivedAtMs, s: snapshot }
-  meta: new Map(), // player id -> { name, color, hat }
+  meta: new Map(), // player id -> { name, color, hat, skin }
   look: loadLook(),
   theme: 'sunny',
   avatars: [], // little canvases that animate (menus, results)
@@ -48,7 +48,8 @@ function loadLook() {
   return {
     name: typeof saved.name === 'string' ? saved.name : '',
     color: Number.isInteger(saved.color) ? saved.color % COLORS.length : Math.floor(Math.random() * COLORS.length),
-    hat: Number.isInteger(saved.hat) ? saved.hat % HATS.length : 0,
+    hat: Number.isInteger(saved.hat) && saved.hat >= 0 ? saved.hat % HATS.length : 0,
+    skin: Number.isInteger(saved.skin) && saved.skin >= 0 ? saved.skin % SKINS.length : 0,
   };
 }
 function saveLook() {
@@ -138,7 +139,8 @@ function buildLogo() {
 }
 
 const pickers = [];
-function mountPicker(swatchesEl, prevBtn, nextBtn, nameEl) {
+function mountPicker(prefix) {
+  const swatchesEl = $(`${prefix}-swatches`);
   COLORS.forEach((c, i) => {
     const b = el('button', 'swatch');
     b.type = 'button';
@@ -150,21 +152,22 @@ function mountPicker(swatchesEl, prevBtn, nextBtn, nameEl) {
     });
     swatchesEl.appendChild(b);
   });
-  prevBtn.addEventListener('click', () => {
-    S.look.hat = (S.look.hat + HATS.length - 1) % HATS.length;
+  const step = (key, list, dir) => {
+    S.look[key] = (S.look[key] + list.length + dir) % list.length;
     lookChanged();
-  });
-  nextBtn.addEventListener('click', () => {
-    S.look.hat = (S.look.hat + 1) % HATS.length;
-    lookChanged();
-  });
-  pickers.push({ swatchesEl, nameEl });
+  };
+  $(`${prefix}-hat-prev`).addEventListener('click', () => step('hat', HATS, -1));
+  $(`${prefix}-hat-next`).addEventListener('click', () => step('hat', HATS, 1));
+  $(`${prefix}-skin-prev`).addEventListener('click', () => step('skin', SKINS, -1));
+  $(`${prefix}-skin-next`).addEventListener('click', () => step('skin', SKINS, 1));
+  pickers.push({ swatchesEl, hatEl: $(`${prefix}-hat-name`), skinEl: $(`${prefix}-skin-name`) });
 }
 
 function refreshPickers() {
   for (const p of pickers) {
     [...p.swatchesEl.children].forEach((b, i) => b.classList.toggle('on', i === S.look.color));
-    p.nameEl.textContent = HATS[S.look.hat];
+    p.hatEl.textContent = HATS[S.look.hat];
+    p.skinEl.textContent = SKINS[S.look.skin];
   }
 }
 
@@ -173,7 +176,7 @@ function lookChanged() {
   refreshPickers();
   sfx.click();
   if (S.room && (S.room.phase === 'lobby' || S.room.phase === 'final')) {
-    socket.emit('room:customize', { color: S.look.color, hat: S.look.hat });
+    socket.emit('room:customize', { color: S.look.color, hat: S.look.hat, skin: S.look.skin });
   }
 }
 
@@ -193,7 +196,7 @@ async function createRoom() {
   $('btn-create').disabled = true;
   const res = await request(
     'room:create',
-    { name: currentName(), color: S.look.color, hat: S.look.hat },
+    { name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin },
     (r) => {
       if (r.ok) enterRoom(r);
     }
@@ -212,7 +215,7 @@ async function joinRoom() {
   $('btn-join').disabled = true;
   const res = await request(
     'room:join',
-    { code, name: currentName(), color: S.look.color, hat: S.look.hat },
+    { code, name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin },
     (r) => {
       if (r.ok) enterRoom(r);
     }
@@ -262,7 +265,7 @@ function renderLobby(st) {
     cv.width = 160;
     cv.height = 208;
     card.appendChild(cv);
-    addAvatar(cv, () => S.meta.get(p.id) || { color: 0, hat: 0 }, p.ready ? 'happy' : 'normal');
+    addAvatar(cv, () => S.meta.get(p.id) || { color: 0, hat: 0, skin: 0 }, p.ready ? 'happy' : 'normal');
     card.appendChild(el('div', 'pname', p.id === S.me ? `${p.name} (you)` : p.name));
     card.appendChild(
       el('div', 'pstatus', !p.connected ? 'reconnecting…' : p.id === st.hostId ? 'Host' : p.ready ? 'Ready!' : 'Not ready')
@@ -337,14 +340,14 @@ function renderResults(st) {
     cv.width = 88;
     cv.height = 112;
     d.appendChild(cv);
-    addAvatar(cv, () => ({ color: row.color, hat: row.hat }), row.place === 1 ? 'happy' : row.survived ? 'normal' : 'dizzy');
+    addAvatar(cv, () => ({ color: row.color, hat: row.hat, skin: row.skin }), row.place === 1 ? 'happy' : row.survived ? 'normal' : 'dizzy');
     const who = el('div', 'who', row.id === S.me ? `${row.name} (you)` : row.name);
     if (row.abandoned) who.appendChild(el('small', null, 'left the game'));
     else if (row.title) who.appendChild(el('small', null, row.title));
     d.appendChild(who);
     const pts = el('div', 'pts', `+${row.points}`);
     if (row.koBonus > 0) pts.appendChild(el('small', null, `${row.basePoints} place + ${row.koBonus} KO`));
-    else pts.appendChild(el('small', null, 'place'));
+    else pts.appendChild(el('small', null, row.detail || 'place'));
     d.appendChild(pts);
     d.appendChild(el('div', 'tot', `${row.total} total`));
     rows.appendChild(d);
@@ -368,7 +371,7 @@ function renderFinal(st) {
     cv.width = 88;
     cv.height = 112;
     d.appendChild(cv);
-    addAvatar(cv, () => ({ color: s.color, hat: s.hat }), s.place === 1 ? 'happy' : 'normal');
+    addAvatar(cv, () => ({ color: s.color, hat: s.hat, skin: s.skin }), s.place === 1 ? 'happy' : 'normal');
     d.appendChild(el('div', 'who', s.id === S.me ? `${s.name} (you)` : s.name));
     d.appendChild(el('div', 'pts', `${s.score}`));
     rows.appendChild(d);
@@ -384,7 +387,7 @@ function applyRoomState(st) {
   const prev = S.room;
   S.room = st;
   S.phaseEndsAt = performance.now() + st.endsInMs;
-  for (const p of st.players) S.meta.set(p.id, { name: p.name, color: p.color, hat: p.hat });
+  for (const p of st.players) S.meta.set(p.id, { name: p.name, color: p.color, hat: p.hat, skin: p.skin });
 
   // If the server says we are not in this room any more, go back to the title.
   if (S.me && !st.players.some((p) => p.id === S.me)) {
@@ -468,6 +471,14 @@ socket.on('game:snap', (snap) => {
   S.snaps.push({ r: performance.now(), s: snap });
   if (S.snaps.length > 16) S.snaps.shift();
   handleEvents(snap);
+  // Hot Potato: tick faster and louder for the last three seconds of the fuse.
+  if (snap.bomb) {
+    const f = Math.ceil(snap.bomb.fuse);
+    if (f <= 3 && f > 0 && f !== S.lastFuse) sfx.fuse();
+    S.lastFuse = f;
+  } else {
+    S.lastFuse = null;
+  }
 });
 
 function nameOf(id) {
@@ -539,6 +550,50 @@ function handleEvents(snap) {
           sfx.deny();
           toast('Float over solid floor to drop goo!');
         }
+        break;
+      case 'coin': {
+        const gold = ev.jackpot ? ['#ffd23f', '#fff27a', '#ffffff'] : ['#ffd23f', '#ffffff'];
+        renderer.burst(OX + ev.x, OY + ev.y - 14, gold, ev.jackpot ? 18 : 6, ev.jackpot ? 260 : 120, 'star', ev.jackpot ? 0.8 : 0.4);
+        if (mine) {
+          renderer.floatText(OX + ev.x, OY + ev.y - 44, `+${ev.v}`, '#ffe66d', ev.jackpot ? 36 : 22);
+          sfx.coin(1);
+          if (ev.jackpot) sfx.jackpot();
+        } else sfx.coin(0.25);
+        break;
+      }
+      case 'jackpot':
+        renderer.floatText(OX + ev.x, OY + ev.y - 54, 'JACKPOT!', '#fff27a', 30);
+        toast('A JACKPOT coin appeared!');
+        sfx.jackpot();
+        break;
+      case 'drop':
+        renderer.burst(OX + ev.x, OY + ev.y - 20, ['#ffd23f', '#ffe27a'], 8, 200, 'circle', 0.5);
+        if (mine) renderer.floatText(OX + ev.x, OY + ev.y - 70, `-${ev.n}`, '#ff8a8a', 26);
+        sfx.drop();
+        break;
+      case 'bomb':
+        sfx.pass();
+        if (ev.from) {
+          renderer.floatText(OX + ev.x, OY + ev.y - 70, 'TAG!', '#ff8a3d', 28);
+          renderer.burst(OX + ev.x, OY + ev.y - 30, ['#ffb02e', '#ff595e', '#ffffff'], 10, 220, 'star', 0.5);
+        } else {
+          toast(ev.id === S.me ? 'You have the bomb! SHOVE someone to pass it!' : `${nameOf(ev.id)} has the bomb!`);
+        }
+        break;
+      case 'boom':
+        renderer.burst(OX + ev.x, OY + ev.y - 25, ['#ff595e', '#ffb02e', '#ffe66d', '#3a3a4a'], 34, 440, 'star', 1.0);
+        renderer.burst(OX + ev.x, OY + ev.y - 25, ['#ffffff', '#ffd9a0'], 14, 300, 'circle', 0.7);
+        renderer.floatText(OX + ev.x, OY + ev.y - 90, 'BOOM!', '#ff8a3d', 40);
+        renderer.addShake(ev.id === S.me ? 22 : 14);
+        sfx.boom();
+        break;
+      case 'zoneWarn':
+        toast('The hill is about to move!');
+        sfx.tick();
+        break;
+      case 'zoneMove':
+        renderer.addShake(3);
+        sfx.zone();
         break;
       case 'go':
         sfx.go();
@@ -617,12 +672,15 @@ function updateHud(frame) {
   const timer = $('hud-timer');
   if (timer.textContent !== String(left)) timer.textContent = String(left);
   timer.classList.toggle('danger', left <= 10 && t >= 0 && !frame.finished);
-  $('hud-alive').textContent = `${frame.aliveCount} standing`;
+  const gid = frame.latest.gid;
+  const arenaGame = !!gid && gid !== 'crumbleFloor'; // Gold Grab, Hot Potato, Hill Hustle...
+  const status = arenaGame ? frame.latest.hud || '' : `${frame.aliveCount} standing`;
+  if ($('hud-alive').textContent !== status) $('hud-alive').textContent = status;
 
   const mine = frame.latest.map.get(S.me);
-  const ghost = mine && mine.st === 'ghost';
-  $('ab-jump-label').textContent = ghost ? 'Float' : 'Jump';
-  $('ab-shove-label').textContent = ghost ? 'Drop goo' : 'Shove';
+  const ghost = !arenaGame && mine && mine.st === 'ghost';
+  $('ab-jump-label').textContent = ghost ? 'Float' : arenaGame ? arena.jumpLabel || 'Jump' : 'Jump';
+  $('ab-shove-label').textContent = ghost ? 'Drop goo' : arenaGame ? arena.shoveLabel || 'Shove' : 'Shove';
   const fill = $('ab-shove-fill');
   let frac = 1;
   if (mine && mine.st === 'alive') frac = 1 - Math.min(1, mine.cd / arena.shoveCooldown);
@@ -631,21 +689,30 @@ function updateHud(frame) {
   $('ab-shove').classList.toggle('cooling', frac < 1);
 
   // Scoreboard chips (rebuilt only when something changes)
-  const sig = st.players.map((p) => `${p.id}:${p.score}:${(frame.latest.map.get(p.id) || {}).st}`).join('|');
+  // (In the arena games the chips show this round's score: coins, booms, seconds.)
+  const sig = st.players.map((p) => `${p.id}:${p.score}:${(frame.latest.map.get(p.id) || {}).st}:${(frame.latest.map.get(p.id) || {}).rs}`).join('|');
   if (sig !== S.hudSig) {
     S.hudSig = sig;
     const box = $('hud-scores');
     box.textContent = '';
-    const list = [...st.players].sort((x, y) => y.score - x.score);
+    const roundScore = (p) => ((frame.latest.map.get(p.id) || {}).rs || 0);
+    const list = [...st.players];
+    if (arenaGame) {
+      const dir = arena.scoreDir === 'low' ? 1 : -1;
+      list.sort((x, y) => dir * (roundScore(x) - roundScore(y)) || y.score - x.score);
+    } else {
+      list.sort((x, y) => y.score - x.score);
+    }
     for (const p of list) {
       const ps = frame.latest.map.get(p.id);
       const chip = el('div', 'chip');
       if (p.id === S.me) chip.classList.add('me');
-      if (ps && ps.st !== 'alive') chip.classList.add('out');
+      if (ps && (ps.st === 'left' || (!arenaGame && ps.st !== 'alive'))) chip.classList.add('out');
       const dot = el('i');
       dot.style.background = COLORS[p.color % COLORS.length].hex;
       chip.appendChild(dot);
-      chip.appendChild(el('span', null, `${p.name} ${p.score}`));
+      chip.appendChild(el('span', null, arenaGame ? `${p.name} ${roundScore(p)}` : `${p.name} ${p.score}`));
+      if (arenaGame && arena.scoreLabel) chip.title = `${roundScore(p)} ${arena.scoreLabel} this round (${p.score} points so far)`;
       box.appendChild(chip);
     }
   }
@@ -687,6 +754,9 @@ function updateHud(frame) {
   } else if (st.phase === 'playing' && mine && mine.st === 'ghost') {
     banner.textContent = 'You are a ghost! Press E over solid floor to drop goo on the survivors.';
     banner.classList.remove('hidden');
+  } else if (st.phase === 'playing' && arenaGame && mine && mine.bm && t >= 0 && !frame.finished) {
+    banner.textContent = 'YOU HAVE THE BOMB! Shove someone to pass it on!';
+    banner.classList.remove('hidden');
   } else {
     banner.classList.add('hidden');
   }
@@ -725,8 +795,8 @@ function loop(now) {
 function bindUi() {
   buildLogo();
 
-  mountPicker($('title-swatches'), $('title-hat-prev'), $('title-hat-next'), $('title-hat-name'));
-  mountPicker($('lobby-swatches'), $('lobby-hat-prev'), $('lobby-hat-next'), $('lobby-hat-name'));
+  mountPicker('title');
+  mountPicker('lobby');
   refreshPickers();
   addAvatar($('title-preview'), () => S.look);
 

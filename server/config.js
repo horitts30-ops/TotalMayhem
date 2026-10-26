@@ -35,6 +35,7 @@ module.exports = {
 
   // Cosmetic choices that exist (the client draws them; the server only
   // checks that the numbers are in range).
-  COLOR_COUNT: 8,
-  HAT_COUNT: 7,
+  COLOR_COUNT: 12,
+  HAT_COUNT: 16,
+  SKIN_COUNT: 8,
 };

@@ -161,6 +161,32 @@ export const sfx = {
     [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.16, { type: 'square', vol: 0.07, delay: i * 0.1 }));
     tone(1318, 0.4, { type: 'triangle', vol: 0.08, delay: 0.42 });
   },
+  coin(v = 1) {
+    if (!throttle('coin', 40)) return;
+    tone(988, 0.07, { type: 'square', vol: 0.05 * v });
+    tone(1319, 0.14, { type: 'square', vol: 0.05 * v, delay: 0.06 });
+  },
+  jackpot() {
+    [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.1, { type: 'triangle', vol: 0.07, delay: i * 0.06 }));
+  },
+  drop() {
+    tone(500, 0.18, { type: 'triangle', vol: 0.06, to: 220 });
+    noise(0.1, { vol: 0.05, freq: 2600, q: 2 });
+  },
+  pass() {
+    tone(330, 0.09, { type: 'square', vol: 0.07 });
+    tone(660, 0.14, { type: 'square', vol: 0.07, delay: 0.08 });
+  },
+  boom() {
+    noise(0.55, { vol: 0.28, freq: 260, q: 0.5 });
+    tone(150, 0.5, { type: 'sawtooth', vol: 0.12, to: 40 });
+  },
+  fuse() {
+    tone(1200, 0.05, { type: 'square', vol: 0.04 });
+  },
+  zone() {
+    tone(220, 0.3, { type: 'sine', vol: 0.07, to: 440 });
+  },
   lose() {
     tone(330, 0.2, { type: 'triangle', vol: 0.07 });
     tone(262, 0.3, { type: 'triangle', vol: 0.07, delay: 0.18 });

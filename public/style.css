@@ -199,7 +199,7 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
   border-radius: 18px; padding: 6px 16px; font-weight: 900; font-size: 1.1rem; box-shadow: 0 4px 0 var(--ink);
 }
 #hud-round { left: 20px; }
-#hud-alive { right: 20px; }
+#hud-alive { right: 20px; max-width: 410px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timer {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
   min-width: 100px; text-align: center; background: var(--yellow); border: 4px solid var(--ink); border-radius: 22px;

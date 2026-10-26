@@ -86,7 +86,7 @@ function createGameServer(options = {}) {
       if (socket.data.roomCode) leaveCurrentRoom(true);
       const room = manager.create();
       if (!room) return cb({ ok: false, error: 'The server is busy right now. Please try again in a minute.' });
-      const player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat });
+      const player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin });
       attach(room, player);
       log(`[room ${room.code}] created by ${player.name}`);
       cb({ ok: true, code: room.code, playerId: player.id, token: player.token });
@@ -102,7 +102,7 @@ function createGameServer(options = {}) {
       if (socket.data.roomCode) leaveCurrentRoom(true);
       let player;
       try {
-        player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat });
+        player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin });
       } catch (err) {
         return cb({ ok: false, error: err.message });
       }
@@ -145,6 +145,7 @@ function createGameServer(options = {}) {
         name: data && data.name !== undefined ? cleanName(data.name) || undefined : undefined,
         color: data && data.color,
         hat: data && data.hat,
+        skin: data && data.skin,
       });
     });
 

@@ -74,6 +74,7 @@ class Room {
       name: this.uniqueName(info.name),
       color: safeInt(info.color, 0, this.cfg.COLOR_COUNT - 1, 0),
       hat: safeInt(info.hat, 0, this.cfg.HAT_COUNT - 1, 0),
+      skin: safeInt(info.skin, 0, this.cfg.SKIN_COUNT - 1, 0),
       ready: false,
       connected: true,
       socketId: null,
@@ -135,6 +136,7 @@ class Room {
     if (data.name !== undefined) p.name = this.uniqueName(data.name, p.id);
     if (data.color !== undefined) p.color = safeInt(data.color, 0, this.cfg.COLOR_COUNT - 1, p.color);
     if (data.hat !== undefined) p.hat = safeInt(data.hat, 0, this.cfg.HAT_COUNT - 1, p.hat);
+    if (data.skin !== undefined) p.skin = safeInt(data.skin, 0, this.cfg.SKIN_COUNT - 1, p.skin);
     this.broadcastState();
   }
 
@@ -169,7 +171,12 @@ class Room {
     this.round = 0;
     this.final = null;
     this.results = null;
-    this.schedule = games.buildSchedule(this.rounds);
+    // (Tests can pin the schedule with cfg.SCHEDULE_OVERRIDE = [{game, variant}, ...])
+    const pinned = this.cfg.SCHEDULE_OVERRIDE;
+    this.schedule =
+      Array.isArray(pinned) && pinned.length > 0
+        ? Array.from({ length: this.rounds }, (_, i) => pinned[i % pinned.length])
+        : games.buildSchedule(this.rounds);
     this.beginIntro();
     return null;
   }
@@ -227,6 +234,7 @@ class Room {
         name: p ? p.name : 'Player',
         color: p ? p.color : 0,
         hat: p ? p.hat : 0,
+        skin: p ? p.skin : 0,
         total: p ? p.score : 0,
       };
     });
@@ -238,7 +246,7 @@ class Room {
 
   beginFinal() {
     const list = [...this.players.values()]
-      .map((p) => ({ id: p.id, name: p.name, color: p.color, hat: p.hat, score: p.score, connected: p.connected }))
+      .map((p) => ({ id: p.id, name: p.name, color: p.color, hat: p.hat, skin: p.skin, score: p.score, connected: p.connected }))
       .sort((a, b) => b.score - a.score);
     let place = 1;
     list.forEach((e, i) => {
@@ -324,6 +332,7 @@ class Room {
         name: p.name,
         color: p.color,
         hat: p.hat,
+        skin: p.skin,
         ready: p.ready,
         connected: p.connected,
         score: p.score,

@@ -104,6 +104,46 @@ const VARIANTS = {
     slide: 0.5,
     theme: 'icy',
   },
+  // ---- more floors ---------------------------------------------------------
+  // Optional extra knobs: `gravity` and `jump` multiply the jump physics.
+  lava: {
+    name: 'Crumble Floor: Lava Lounge',
+    tagline: 'It is warm. It is also collapsing.',
+    crack: 0.8,
+    interval: 0.8,
+    grip: 1.0,
+    slide: 1.0,
+    theme: 'lava',
+  },
+  moon: {
+    name: 'Crumble Floor: Moonbase',
+    tagline: 'Low gravity. Big jumps. Same doom.',
+    crack: 1.0,
+    interval: 0.9,
+    grip: 0.8,
+    slide: 0.6,
+    gravity: 0.55, // floaty
+    jump: 0.75, // ...but not rocket-high: about 70px up, ~200px far, ~0.87s in the air
+    theme: 'moon',
+  },
+  candy: {
+    name: 'Crumble Floor: Candy Crumble',
+    tagline: 'Sweet, sticky and still falling apart.',
+    crack: 1.25,
+    interval: 1.15,
+    grip: 1.0,
+    slide: 1.0,
+    theme: 'candy',
+  },
+  jungle: {
+    name: 'Crumble Floor: Swamp Stomp',
+    tagline: 'Heavy boots. Hard to push. Hard to steer.',
+    crack: 0.9,
+    interval: 0.95,
+    grip: 0.8,
+    slide: 1.5, // knockback dies out quickly
+    theme: 'jungle',
+  },
 };
 
 const INSTRUCTIONS = [
@@ -406,7 +446,7 @@ class CrumbleFloor {
 
     if (p.jumpBuf > 0) {
       if (grounded || p.coyote > 0) {
-        p.vz = TUNING.jumpSpeed;
+        p.vz = TUNING.jumpSpeed * (this.v.jump || 1);
         p.z = 0.01;
         p.coyote = 0;
         p.jumpBuf = 0;
@@ -439,7 +479,7 @@ class CrumbleFloor {
 
     // --- Gravity / landing ---------------------------------------------------
     if (!grounded || p.vz > 0) {
-      p.vz -= TUNING.gravity * dt;
+      p.vz -= TUNING.gravity * (this.v.gravity || 1) * dt;
       p.z += p.vz * dt;
       if (p.z <= 0) {
         p.z = 0;
