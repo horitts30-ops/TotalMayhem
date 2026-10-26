@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TOTAL MAYHEM</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%AA%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- ============================ TITLE SCREEN ============================ -->
+  <section id="screen-title" class="screen">
+    <div class="card title-card">
+      <h1 id="logo" class="logo" aria-label="Total Mayhem"></h1>
+      <p class="tagline">Short, silly minigames. Zero dignity.</p>
+
+      <div class="title-grid">
+        <div class="look-col">
+          <canvas id="title-preview" width="200" height="260"></canvas>
+          <div class="hat-row">
+            <button class="mini" id="title-hat-prev" aria-label="Previous hat">&#9664;</button>
+            <span id="title-hat-name" class="hat-name">No hat</span>
+            <button class="mini" id="title-hat-next" aria-label="Next hat">&#9654;</button>
+          </div>
+          <div id="title-swatches" class="swatches"></div>
+        </div>
+
+        <div class="form-col">
+          <label class="field">
+            <span>Your name</span>
+            <input id="name-input" maxlength="14" placeholder="Pick a silly name" autocomplete="off" spellcheck="false">
+          </label>
+          <button id="btn-create" class="btn big">Create a room</button>
+          <div class="or"><span>or join your friends</span></div>
+          <div class="join-row">
+            <input id="code-input" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <button id="btn-join" class="btn">Join</button>
+          </div>
+          <div id="title-error" class="error" role="alert"></div>
+        </div>
+      </div>
+
+      <div class="controls-hint">
+        <span><b>WASD</b>/<b>Arrows</b> move</span>
+        <span><b>Space</b> jump</span>
+        <span><b>E</b>/<b>Shift</b> shove</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== LOBBY ================================= -->
+  <section id="screen-lobby" class="screen hidden">
+    <div class="card lobby-card">
+      <div class="lobby-head">
+        <div>
+          <div class="small">Room code</div>
+          <div id="lobby-code" class="code">----</div>
+        </div>
+        <div class="lobby-actions">
+          <button id="btn-copy" class="btn small">Copy invite link</button>
+          <button id="btn-leave" class="btn small ghost">Leave</button>
+        </div>
+      </div>
+
+      <div id="lobby-players" class="players-grid"></div>
+
+      <div class="lobby-look">
+        <span class="small">Your look</span>
+        <div id="lobby-swatches" class="swatches"></div>
+        <div class="hat-row">
+          <button class="mini" id="lobby-hat-prev" aria-label="Previous hat">&#9664;</button>
+          <span id="lobby-hat-name" class="hat-name">No hat</span>
+          <button class="mini" id="lobby-hat-next" aria-label="Next hat">&#9654;</button>
+        </div>
+      </div>
+
+      <div class="lobby-foot">
+        <label id="rounds-wrap" class="inline-field">Rounds
+          <select id="rounds-select"></select>
+        </label>
+        <button id="btn-ready" class="btn">I'm ready!</button>
+        <button id="btn-start" class="btn big">Start match</button>
+      </div>
+      <div id="lobby-hint" class="hint"></div>
+      <div id="lobby-error" class="error" role="alert"></div>
+    </div>
+  </section>
+
+  <!-- ================================ STAGE =============================== -->
+  <div id="stage-wrap" class="hidden">
+    <div id="stage">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="hud" class="hidden">
+        <div id="hud-round" class="pill"></div>
+        <div id="hud-timer" class="timer">75</div>
+        <div id="hud-alive" class="pill"></div>
+        <div id="hud-bottom">
+          <div id="hud-abilities">
+            <div class="ability"><span class="key">SPACE</span><span class="ab-name" id="ab-jump-label">Jump</span></div>
+            <div class="ability" id="ab-shove">
+              <span class="key">E</span><span class="ab-name" id="ab-shove-label">Shove</span>
+              <span class="cd"><i id="ab-shove-fill"></i></span>
+            </div>
+          </div>
+          <div id="hud-scores"></div>
+        </div>
+      </div>
+
+      <div id="overlay-countdown" class="overlay clear hidden"><div id="countdown-text"></div></div>
+      <div id="banner" class="banner hidden"></div>
+
+      <div id="overlay-intro" class="overlay solid hidden">
+        <div class="intro-card">
+          <div id="intro-round" class="intro-round"></div>
+          <h2 id="intro-title" class="intro-title"></h2>
+          <p id="intro-tagline" class="intro-tagline"></p>
+          <ol id="intro-steps" class="intro-steps"></ol>
+          <div id="intro-controls" class="intro-controls"></div>
+          <div id="intro-count" class="intro-count"></div>
+        </div>
+      </div>
+
+      <div id="overlay-results" class="overlay dim hidden">
+        <div class="panel results-panel">
+          <div id="results-head" class="panel-head"></div>
+          <div id="results-rows" class="rows"></div>
+          <div id="results-foot" class="panel-foot"></div>
+        </div>
+      </div>
+
+      <div id="overlay-final" class="overlay solid hidden">
+        <div class="panel final-panel">
+          <div class="panel-head">Final standings</div>
+          <div id="final-winner" class="final-winner"></div>
+          <div id="final-rows" class="rows"></div>
+          <div id="final-actions" class="final-actions">
+            <button id="btn-again" class="btn big">Play again</button>
+            <button id="btn-tolobby" class="btn ghost">Back to lobby</button>
+            <button id="btn-leave2" class="btn ghost">Leave</button>
+          </div>
+          <div id="final-wait" class="hint"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="conn-banner" class="conn hidden">Connection lost. Reconnecting&hellip;</div>
+  <div id="toast" class="toast"></div>
+  <button id="mute-btn" class="mute" title="Mute / unmute (M)" aria-label="Toggle sound">&#128266;</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
