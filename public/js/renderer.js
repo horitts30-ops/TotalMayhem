@@ -874,6 +874,8 @@ export class Renderer {
 
     ctx.restore();
 
+    if (arena && frame.latest.blind) this.drawBlindfold(ctx, frame.latest.bt || 1);
+
     if (this.confettiTimer > 0) {
       this.confettiTimer -= dt;
       for (let i = 0; i < 3; i++) {
@@ -1102,6 +1104,348 @@ export class Renderer {
     const snap = frame.latest;
     if (snap.zone) this.drawHill(ctx, frame, snap.zone);
     if (snap.cn) this.drawCoins(ctx, snap.cn);
+    if (snap.mt) this.drawMeteors(ctx, snap.mt);
+    if (snap.crown && !snap.crown.hd) this.drawCrownOnFloor(ctx, snap.crown);
+  }
+
+  // Meteor Mayhem: a red circle that fills up, then BAM.
+  drawMeteors(ctx, list) {
+    for (const [id, x, y, r, f] of list) {
+      const X = OX + x;
+      const Y = OY + y;
+      const pulse = 0.5 + 0.5 * Math.sin(this.clock * (8 + f * 14));
+      ctx.save();
+      ctx.translate(X, Y);
+      ctx.scale(1, 0.78);
+      // the warning disc grows from the middle
+      ctx.fillStyle = `rgba(255,70,60,${0.16 + 0.12 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,70,60,${0.28 + 0.25 * f})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(4, r * f), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = f > 0.7 ? '#ffffff' : '#ff4d4d';
+      ctx.lineWidth = 5;
+      ctx.setLineDash([16, 10]);
+      ctx.lineDashOffset = -this.clock * 60;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      // the rock itself drops in from above
+      const fall = Math.pow(f, 2.2);
+      const my = Y - 18 - (1 - fall) * 360;
+      const sc = 0.55 + 0.45 * fall;
+      ctx.save();
+      ctx.translate(X, my);
+      ctx.scale(sc, sc);
+      ctx.fillStyle = 'rgba(255,150,40,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(-10, -4);
+      ctx.lineTo(0, -70 - (1 - fall) * 40);
+      ctx.lineTo(10, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#6b5b6e';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.5;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-18, 2);
+      ctx.lineTo(-12, -14);
+      ctx.lineTo(4, -18);
+      ctx.lineTo(18, -6);
+      ctx.lineTo(12, 10);
+      ctx.lineTo(-8, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(-4, -7, 5, 3, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Crown Chaos: the crown lying on the floor (it sparkles, and spins when flying).
+  drawCrownOnFloor(ctx, c) {
+    const X = OX + c.x;
+    const Y = OY + c.y;
+    const bob = c.mv ? 0 : Math.sin(this.clock * 4) * 3;
+    ctx.fillStyle = 'rgba(20,5,40,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(X, Y + 4, 17, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const g = ctx.createRadialGradient(X, Y - 14, 3, X, Y - 14, 46);
+    g.addColorStop(0, 'rgba(255,240,120,0.55)');
+    g.addColorStop(1, 'rgba(255,240,120,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(X, Y - 14, 46, 0, Math.PI * 2);
+    ctx.fill();
+    this.crownShape(ctx, X, Y - 12 + bob, 1.25, c.mv ? this.clock * 9 : 0);
+  }
+
+  // The crown shape itself (also used on the wearer's head). `heat` makes it glow red.
+  crownShape(ctx, x, y, scale = 1, spin = 0, heat = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale * (spin ? Math.max(0.25, Math.abs(Math.cos(spin))) : 1), scale);
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = heat > 0.6 && Math.sin(this.clock * 20) > 0 ? '#ff7a3d' : '#ffd23f';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-14, 8);
+    ctx.lineTo(-16, -10);
+    ctx.lineTo(-7, -2);
+    ctx.lineTo(0, -14);
+    ctx.lineTo(7, -2);
+    ctx.lineTo(16, -10);
+    ctx.lineTo(14, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ff4d8d';
+    ctx.beginPath();
+    ctx.arc(0, 1, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4dd2ff';
+    ctx.beginPath();
+    ctx.arc(-8, 3, 2, 0, Math.PI * 2);
+    ctx.arc(8, 3, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Prop Hunt: one prop, standing on the floor at (x, y). Types match the
+  // server's list: 0 crate, 1 barrel, 2 plant, 3 rock, 4 gift, 5 cactus.
+  drawProp(ctx, x, y, type, mine = false) {
+    const X = OX + x;
+    const Y = OY + y;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3.5;
+    // shadow
+    ctx.fillStyle = 'rgba(20,5,40,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(X, Y + 3, 22, 8.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.translate(X, Y);
+    switch (type % 6) {
+      case 0: // crate
+        ctx.fillStyle = '#c98a4b';
+        rr(ctx, -20, -40, 40, 40, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#a56d33';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-17, -37);
+        ctx.lineTo(17, -3);
+        ctx.moveTo(17, -37);
+        ctx.lineTo(-17, -3);
+        ctx.stroke();
+        ctx.strokeRect(-14, -34, 28, 28);
+        break;
+      case 1: // barrel
+        ctx.fillStyle = '#8f5a34';
+        ctx.beginPath();
+        ctx.moveTo(-16, 0);
+        ctx.quadraticCurveTo(-24, -22, -16, -44);
+        ctx.lineTo(16, -44);
+        ctx.quadraticCurveTo(24, -22, 16, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = '#4a4a5c';
+        ctx.lineWidth = 4;
+        for (const yy of [-34, -10]) {
+          ctx.beginPath();
+          ctx.moveTo(-21, yy);
+          ctx.quadraticCurveTo(0, yy + 5, 21, yy);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = INK;
+        ctx.fillStyle = '#b57a4a';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(0, -44, 16, 5.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 2: // potted plant
+        ctx.fillStyle = '#3fae5a';
+        for (const [lx, ly, rot] of [[-12, -42, -0.5], [0, -50, 0], [12, -42, 0.5]]) {
+          ctx.save();
+          ctx.translate(lx * 0.6, -18);
+          ctx.rotate(rot);
+          ctx.beginPath();
+          ctx.ellipse(0, ly + 18, 8, 17, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.fillStyle = '#d9714b';
+        ctx.beginPath();
+        ctx.moveTo(-15, -22);
+        ctx.lineTo(15, -22);
+        ctx.lineTo(11, 0);
+        ctx.lineTo(-11, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#e88a63';
+        rr(ctx, -17, -27, 34, 8, 3);
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 3: // rock
+        ctx.fillStyle = '#9aa0ae';
+        ctx.beginPath();
+        ctx.moveTo(-22, 0);
+        ctx.quadraticCurveTo(-26, -22, -10, -34);
+        ctx.quadraticCurveTo(6, -42, 18, -26);
+        ctx.quadraticCurveTo(28, -10, 22, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(-7, -26, 6, 4, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#6a7080';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(6, -20);
+        ctx.lineTo(10, -10);
+        ctx.stroke();
+        break;
+      case 4: // gift box
+        ctx.fillStyle = '#ff5d73';
+        rr(ctx, -19, -34, 38, 34, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillRect(-4, -34, 8, 34);
+        ctx.strokeRect(-4, -34, 8, 34);
+        ctx.fillStyle = '#ff7f90';
+        rr(ctx, -22, -44, 44, 12, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath();
+        ctx.ellipse(-7, -50, 8, 5.5, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(7, -50, 8, 5.5, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        break;
+      default: // cactus
+        ctx.fillStyle = '#4cbf6a';
+        rr(ctx, -9, -46, 18, 46, 9);
+        ctx.fill();
+        ctx.stroke();
+        rr(ctx, -21, -32, 10, 20, 5);
+        ctx.fill();
+        ctx.stroke();
+        rr(ctx, 11, -38, 10, 22, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ff6fb5';
+        ctx.beginPath();
+        ctx.arc(0, -48, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        break;
+    }
+    ctx.restore();
+
+    if (mine) {
+      // Only YOUR browser draws this: it is how you find yourself among the props.
+      const bounce = Math.sin(this.clock * 6) * 3;
+      ctx.save();
+      ctx.fillStyle = '#fff27a';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(X - 9, Y - 74 + bounce);
+      ctx.lineTo(X + 9, Y - 74 + bounce);
+      ctx.lineTo(X, Y - 62 + bounce);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = `900 14px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeText('YOU', X, Y - 80 + bounce);
+      ctx.fillStyle = '#fff';
+      ctx.fillText('YOU', X, Y - 80 + bounce);
+      ctx.restore();
+    }
+  }
+
+  // A magnifying glass over a seeker's head (orange for a helper who was found).
+  drawSeekerBadge(ctx, X, Y, helper) {
+    ctx.save();
+    ctx.translate(X, Y);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(5, 5);
+    ctx.lineTo(13, 13);
+    ctx.stroke();
+    ctx.strokeStyle = helper ? '#ff9a3d' : '#ff4d6d';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(5, 5);
+    ctx.lineTo(13, 13);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 8.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = helper ? '#ff9a3d' : '#ff4d6d';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 8.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Seekers cannot see during the hiding time: cover the whole arena.
+  drawBlindfold(ctx, secs) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(26,15,46,0.94)';
+    ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.font = `900 56px ${FONT}`;
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = '#fff27a';
+    ctx.strokeText('Eyes closed!', STAGE_W / 2, STAGE_H / 2 - 40);
+    ctx.fillText('Eyes closed!', STAGE_W / 2, STAGE_H / 2 - 40);
+    ctx.font = `900 30px ${FONT}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('The hiders are hiding...', STAGE_W / 2, STAGE_H / 2 + 8);
+    ctx.font = `900 120px ${FONT}`;
+    ctx.lineWidth = 12;
+    ctx.fillStyle = '#ff8fab';
+    ctx.strokeText(String(secs), STAGE_W / 2, STAGE_H / 2 + 130);
+    ctx.fillText(String(secs), STAGE_W / 2, STAGE_H / 2 + 130);
+    ctx.restore();
   }
 
   drawCoins(ctx, coins) {
@@ -1388,7 +1732,8 @@ export class Renderer {
     const list = [...frame.players].filter((p) => p.st !== 'left');
     list.sort((a, b) => a.y - b.y);
     const ghosts = list.filter((p) => p.st === 'ghost');
-    const bodies = list.filter((p) => p.st !== 'ghost');
+    // (A player who is currently disguised as a prop is drawn as a prop below, not as a blob.)
+    const bodies = list.filter((p) => p.st !== 'ghost' && !p.dg);
 
     // shadows first
     for (const p of bodies) {
@@ -1400,7 +1745,27 @@ export class Renderer {
       ctx.fill();
     }
 
-    for (const p of bodies) this.drawPlayer(ctx, p, frame, dt);
+    // Props (Prop Hunt) and players are drawn together, back to front, so a
+    // player can really walk behind a crate.
+    const items = bodies.map((p) => ({ y: p.y, draw: () => this.drawPlayer(ctx, p, frame, dt) }));
+    const props = frame.latest && frame.latest.props;
+    if (props) {
+      const me = frame.players.find((p) => p.id === frame.myId && p.dg);
+      let mineIdx = -1;
+      if (me) {
+        let best = 40;
+        props.forEach((q, i) => {
+          const d = Math.hypot(q[0] - me.x, q[1] - me.y);
+          if (d < best) {
+            best = d;
+            mineIdx = i;
+          }
+        });
+      }
+      props.forEach((q, i) => items.push({ y: q[1], draw: () => this.drawProp(ctx, q[0], q[1], q[2], i === mineIdx) }));
+    }
+    items.sort((a, b) => a.y - b.y);
+    for (const it of items) it.draw();
     for (const p of ghosts) this.drawGhostPlayer(ctx, p, frame, dt);
 
     // speech bubbles on top
@@ -1540,6 +1905,19 @@ export class Renderer {
 
     if (p.bm) this.drawBomb(ctx, X + 24, Y - 34, frame.latest.bomb);
 
+    // Prop Hunt: a blindfold on the seeker while the hiders hide
+    if (p.rl && frame.latest.hl > 0) {
+      ctx.fillStyle = INK;
+      rr(ctx, X - 20, Y - 41 * sy, 40, 15, 6);
+      ctx.fill();
+    }
+    // Crown Chaos: the wearer's crown sits on top of everything (it glows when it is about to overheat)
+    if (p.cr) {
+      const top = Math.max(52, 48 + (HAT_HEIGHT[meta.hat] || 0));
+      const heat = frame.latest.crown ? frame.latest.crown.heat : 0;
+      this.crownShape(ctx, X, Y - (top - 2) * sy, 1.1 + 0.1 * Math.sin(this.clock * 8), 0, heat);
+    }
+
     if (p.sl) {
       ctx.fillStyle = 'rgba(160,70,220,0.75)';
       for (let i = 0; i < 3; i++) {
@@ -1580,6 +1958,7 @@ export class Renderer {
     if (p.st === 'alive') {
       const top = Math.max(52, 48 + (HAT_HEIGHT[meta.hat] || 0));
       drawNameTag(ctx, meta.name, X, Y - (top + 16) * sy, color, isMe);
+      if (p.rl) this.drawSeekerBadge(ctx, X + (meta.name.length * 4.3 + 18), Y - (top + 16) * sy - 4, !!p.hp);
       if (isMe) {
         const bounce = Math.sin(this.clock * 6) * 3;
         ctx.save();

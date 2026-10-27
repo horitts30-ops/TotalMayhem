@@ -17,12 +17,18 @@ const CrumbleFloor = require('./crumbleFloor');
 const GoldGrab = require('./goldGrab');
 const HotPotato = require('./hotPotato');
 const HillHustle = require('./hillHustle');
+const PropHunt = require('./propHunt');
+const MeteorMayhem = require('./meteorMayhem');
+const CrownChaos = require('./crownChaos');
 
 const GAMES = {
   crumbleFloor: CrumbleFloor,
   goldGrab: GoldGrab,
   hotPotato: HotPotato,
   hillHustle: HillHustle,
+  propHunt: PropHunt,
+  meteorMayhem: MeteorMayhem,
+  crownChaos: CrownChaos,
 };
 
 // A "slot" says which game to run and which variant (twist) of it, for example

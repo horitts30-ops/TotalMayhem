@@ -180,6 +180,25 @@ class ArenaGame {
   _scoreOf(p) {
     return 0; // the number shown on the round-score chips
   }
+  // --- optional hooks (Prop Hunt uses these; most games never touch them)
+  _canMove(p) {
+    return true; // false = this player cannot walk right now
+  }
+  _canJump(p) {
+    return true;
+  }
+  _solid(p) {
+    return true; // false = other players pass straight through this one
+  }
+  // Per-player views: when a game sets `perViewer = true`, every player gets
+  // their OWN snapshot, so the server can keep secrets (like where the hiders
+  // are) instead of trusting the browser to look away.
+  _visible(viewerId, p) {
+    return true; // may this viewer see this player at all?
+  }
+  _eventFor(ev, viewerId) {
+    return ev; // return null to hide an event from a viewer, or a trimmed copy
+  }
 
   // =========================================================== helpers for games
   _randomPoint(margin = 20) {
@@ -247,8 +266,9 @@ class ArenaGame {
 
     const grounded = p.z <= 0;
     const stunned = p.stun > 0;
-    const mx = live ? p.input.mx : 0;
-    const my = live ? p.input.my : 0;
+    const canMove = live && this._canMove(p);
+    const mx = canMove ? p.input.mx : 0;
+    const my = canMove ? p.input.my : 0;
     const len = Math.hypot(mx, my);
     const nx = len > 1 ? mx / len : mx;
     const ny = len > 1 ? my / len : my;
@@ -267,7 +287,9 @@ class ArenaGame {
 
     // jump (a jump pressed slightly early still counts)
     if (live && p.jumpBuf > 0) {
-      if (grounded) {
+      if (!this._canJump(p)) {
+        p.jumpBuf = 0;
+      } else if (grounded) {
         p.vz = TUNING.jumpSpeed * (this.v.jump || 1);
         p.z = 0.01;
         p.jumpBuf = 0;
@@ -359,7 +381,7 @@ class ArenaGame {
 
   // Players are soft, bouncy blobs. You CAN jump over another player.
   _resolveBumps() {
-    const list = this._livePlayers();
+    const list = this._livePlayers().filter((p) => this._solid(p));
     const minD = TUNING.radius * 2;
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
@@ -458,10 +480,29 @@ class ArenaGame {
   }
 
   // =========================================================== snapshot
+  // One shared snapshot for everybody (the normal case)...
   snapshot() {
+    const events = this.events;
+    this.events = [];
+    return this._build(null, events, false);
+  }
+
+  // ...or, for games with secrets, one snapshot per viewer. The returned Map is
+  // keyed by player id; the key '*' is for anybody else (late joiners watching).
+  snapshotsByViewer(viewerIds) {
+    const events = this.events;
+    this.events = [];
+    const out = new Map();
+    for (const id of viewerIds) out.set(id, this._build(id, events, true));
+    out.set('*', this._build(null, events, true));
+    return out;
+  }
+
+  _build(viewerId, events, personal) {
     const winners = this.finished && this._placeOf ? this._placeOf : null;
     const ps = [];
     for (const p of this.players.values()) {
+      if (personal && !this._visible(viewerId, p)) continue;
       ps.push({
         id: p.id,
         x: r1(p.x),
@@ -481,11 +522,17 @@ class ArenaGame {
         cd: r2(p.shoveCd),
         rs: this._scoreOf(p),
         ...(winners && winners.get(p.id) === 1 && !p.abandoned ? { md: 'happy' } : {}),
-        ...this._playerSnapshot(p),
+        ...this._playerSnapshot(p, viewerId),
       });
     }
-    const events = this.events;
-    this.events = [];
+    let ev = events;
+    if (personal) {
+      ev = [];
+      for (const e of events) {
+        const f = this._eventFor(e, viewerId);
+        if (f) ev.push(f);
+      }
+    }
     return {
       t: r2(this.time),
       fin: this.finished,
@@ -493,8 +540,8 @@ class ArenaGame {
       gid: this.constructor.GAME_ID,
       hud: this._hud(),
       ps,
-      ev: events,
-      ...this._extraSnapshot(),
+      ev,
+      ...this._extraSnapshot(viewerId),
     };
   }
 

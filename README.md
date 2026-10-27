@@ -1,9 +1,11 @@
-# TOTAL MAYHEM  (Milestone 3: four minigames)
+# TOTAL MAYHEM  (seven minigames + a coin shop)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
-silly minigames. **This version has four minigames: "Crumble Floor" (on seven
-different floors), "Gold Grab", "Hot Potato" and "Hill Hustle".** A match mixes them.
+silly minigames. **This version has seven minigames: "Crumble Floor" (on seven
+different floors), "Gold Grab", "Hot Potato", "Hill Hustle", "Prop Hunt", "Meteor Mayhem"
+and "Crown Chaos".** A match mixes them. Finishing rounds earns **coins** that you spend in
+the **Shop** on hats, skins and colors (cosmetics only, see section 3).
 
 ---
 
@@ -35,7 +37,7 @@ Stop the server with `Ctrl+C` in the terminal.
 |---|---|
 | Move | `W A S D` or arrow keys |
 | **Jump** | `Space` |
-| Shove (also: pass the bomb in Hot Potato; drop goo when you are a Crumble Floor ghost) | `E` or `Shift` |
+| Shove (also: pass the bomb in Hot Potato; drop goo as a Crumble Floor ghost; **disguise / undisguise** as a Prop Hunt hider; **smack** as the Prop Hunt seeker) | `E` or `Shift` |
 | Mute / unmute | `M` |
 
 ---
@@ -43,7 +45,7 @@ Stop the server with `Ctrl+C` in the terminal.
 ## 3. How a match works
 
 A match is **3 rounds** (the host can choose 1, 3 or 5 in the lobby). Every round is a
-different minigame: all four minigames get played once before any is repeated, the same
+different minigame: every minigame gets played once before any is repeated, the same
 minigame is never played twice in a row, and round 1 always uses a minigame's normal
 version (later rounds get a random twist, such as a different floor). After the last
 round there is a final scoreboard, and the host can click **Play again** without anybody
@@ -118,8 +120,70 @@ place. Anybody who leaves mid-round gets 0 for that round.
   little stronger in this game.
 * Two versions: *Hill Hustle* and *Moving Day* (the hill moves every 7 seconds, low gravity).
 
+### Prop Hunt (Hide & Seek) - 70 seconds
+
+* One player is the **seeker** (two seekers with 7 or 8 players). Everybody else is a **hider**.
+* The seeker is **blindfolded for the first 10 seconds** while the hiders hide. Hiders press
+  `E` to **turn into a prop** (a crate, barrel, plant, rock, gift or cactus). You start as the
+  prop nearest to you so you blend in at once; `Space` swaps to another prop. A prop cannot move.
+  Press `E` again to turn back.
+* The arena is full of ordinary props. The seeker presses `E` to **smack** the one they
+  think is a player. A real hider is **found**; a plain prop makes the seeker **dizzy for a second**,
+  so smacking everything does not work.
+* **Found hiders are not out.** They become helper seekers and keep playing.
+* Scoring: a hider earns a point for every second hidden (+10 if never found); a hider who was
+  found earns 6 for every hider they then find; the seeker gets a base of 25 (never nothing)
+  plus 10 per find. If every hider is found the round ends early.
+* **It is a real secret.** Each player gets their own snapshot from the server. The seeker's
+  snapshot lists a disguised hider as just one more `[x, y, type]` prop, with no marker, and
+  hides the "who" of disguise events. Nothing in what the seeker's browser receives
+  says which props are players. (Watching someone transform in front of you still gives them
+  away, as in any hide and seek.) While blindfolded, the seeker is sent no hiders and no props at all.
+* Two versions: *Prop Hunt* and *Crowded Closet* (26 props, 8 seconds to hide).
+* Playing alone is a hiding practice round (no seeker).
+
+### Meteor Mayhem (Survival) - 60 seconds
+
+* Red circles appear on the floor, fill up, and a meteor lands there 1.35 seconds later.
+  Stand in one when it lands and you are knocked flying and dizzy. **Jump** just as it lands
+  and you hop over the blast.
+* **The fewest hits wins** (a tie goes to whoever went longest without a hit). Nobody is out.
+  After a hit you have a 1.4 second breather, and the storm starts gentle and speeds up.
+* Some meteors land near a random player, so staying in one spot does not work, but they never
+  target the last place player on purpose.
+* Two versions: *Meteor Mayhem* and *Icy Hail* (slippery, smaller and faster).
+
+### Crown Chaos (Keep-away) - 60 seconds
+
+* One crown. **Wear it and score a point every second.** The wearer is a little slower.
+* **Shove the wearer and the crown pops off**; whoever grabs it next wears it. The player who
+  just lost it cannot grab it back for 1.3 seconds, and a shoved wearer has a short shield.
+* The crown **overheats** and flings itself off after 10 seconds of continuous wearing
+  (5 seconds in the *Hot Crown* version), so nobody can sit on it all round.
+* Most crown time wins.
+
 At the end of every round, the results screen hands out silly titles such as
-"Gravity's Favorite", "Coin Goblin", "Human Firework" or "King of the Hill".
+"Gravity's Favorite", "Coin Goblin", "Human Firework", "King of the Hill", "Master of
+Disguise" or "Untouchable".
+
+### Coins and the Shop (cosmetics only)
+
+* **Earning:** everybody who plays a round with others earns **10 coins**, plus the points
+  they scored that round, +5 for winning the round, +3 for getting a silly title. At the end of
+  a match everybody earns **+5**, the winner **+10**. A 3-round match with friends pays roughly
+  50 to 60 coins. Leaving mid-round earns nothing for that round, and playing **alone** only
+  earns a flat 3 coins per round so nobody can farm the shop. The server decides the amounts.
+* **Spending:** click **Shop** on the title screen, in the lobby, or on the final scoreboard.
+  Pick Hats, Skins or Colors, click an item to preview it on your character, then Buy. Some
+  items are free from the start; the cheapest paid ones are about one match, and the best
+  (the Crown hat, the Rainbow skin) take a few matches. Locked colors show a padlock.
+* **It only buys looks.** Nothing in the shop changes how a minigame plays. There is no
+  gambling, no random boxes and nothing for real money.
+* **Where it is saved:** in your browser (`localStorage`), like your name and look. It stays
+  on that browser and survives restarts, but it does not follow you to another device, and
+  clearing the browser's site data wipes it. Because it lives in your browser, a person who
+  edits their own saved data can give THEMSELVES items; that cannot affect anybody else's game.
+
 
 ---
 
@@ -185,7 +249,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **89 automated tests** (about 20 seconds):
+runs **155 automated tests** (about 30 seconds):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -197,14 +261,29 @@ runs **89 automated tests** (about 20 seconds):
   (alone vs contested, warning and hop, staying inside the arena), the countdown, walls,
   shove rules, hostile inputs, players leaving, fuzzed full rounds for every game and
   variant, and the match schedule.
-* `tests/network.test.js` (19 tests) - a real server with real WebSocket clients: rooms,
+* `tests/minigames2.test.js` (47 tests) - Prop Hunt, Meteor Mayhem and Crown Chaos: roles, the
+  blindfold, disguise / swap / cooldown, **the seeker's snapshot never lists a disguised hider**
+  and trims who-did-it events, smack rules (nearest target, dizzy on a plain prop, jump dodge),
+  found players staying in the game, scoring and the early finish, a seeker leaving, solo
+  practice, meteor warning / landing / jump-over / breather / fewest hits wins, crown pickup,
+  knock-off, lockout, shield, overheat, crown leaving the arena, and fuzzed full rounds for
+  every variant and 1-8 players.
+* `tests/shop.test.js` (15 tests) - coin rewards (everybody earns, winning is only a little more,
+  leaving earns nothing, solo is flat) and the shop (free starter items, exact prices, cannot
+  buy twice or when too poor, coins paid once per round even if a screen is replayed, damaged or
+  hand-edited saves are repaired, the < > buttons only visit owned items, old saved looks are
+  swapped for owned ones, how long a match takes to earn an item).
+* `tests/network.test.js` (23 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
   reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety, and
-  a 5-round match that mixes every minigame over the network.
+  a 5-round match that mixes every minigame over the network, coin rewards in the results and
+  final standings (and a new match id per match), and a Prop Hunt match where the seeker's real
+  network data is checked for leaks.
 
-(There is one more test: I also loaded the real web page and its JavaScript in a
-simulated browser and clicked through the whole game. That harness is not part of
+(There is more testing that is not part of `npm test`: I also loaded the real web page in
+a real headless Chromium against the real server, with several browser windows playing, and
+clicked through the shop, a full match and each new minigame. That harness is not part of
 the project, so it will not appear in `npm test`.)
 
 ---
@@ -251,12 +330,17 @@ total-mayhem/
       goldGrab.js         ALL the rules of Gold Grab
       hotPotato.js        ALL the rules of Hot Potato
       hillHustle.js       ALL the rules of Hill Hustle
+      propHunt.js         ALL the rules of Prop Hunt (and the per-player secret snapshots)
+      meteorMayhem.js     ALL the rules of Meteor Mayhem
+      crownChaos.js       ALL the rules of Crown Chaos
+    rewards.js            how many coins a round / match is worth
   public/                 everything the browser downloads
     index.html            the screens
     style.css             colours and layout of menus
     js/
       main.js             connects everything: screens, snapshots, effects, HUD
-      renderer.js         draws characters, hats, tiles, coins, bomb, hill, goo, particles (no image files!)
+      renderer.js         draws characters, hats, tiles, coins, bomb, hill, props, meteors, crown, goo, particles (no image files!)
+      shop.js             the shop catalogue, prices and the coin wallet (no drawing, easy to test)
       constants.js        colours, skin names, hat names, floor themes
       audio.js            synthesized placeholder sound effects
       input.js            keyboard handling
@@ -264,6 +348,8 @@ total-mayhem/
   tests/
     game.test.js          Crumble Floor rules tests
     minigames.test.js     Gold Grab / Hot Potato / Hill Hustle + schedule tests
+    minigames2.test.js    Prop Hunt / Meteor Mayhem / Crown Chaos tests
+    shop.test.js          coin rewards + shop tests
     network.test.js       multiplayer tests
 ```
 
@@ -278,6 +364,8 @@ total-mayhem/
   `goldGrab.js` (coin cap, jackpot timing, how many coins a shove drops), `hotPotato.js`
   (fuse length, pass protection, shockwave) and `hillHustle.js` (hill size, how often it
   hops). The shared feel (speed, jump, shove) is the `TUNING` block in `arenaBase.js`.
+* **Shop prices:** the three `*_PRICES` lists at the top of `public/js/shop.js` (0 = free from
+  the start). **How many coins things pay:** the `REWARD` block in `server/rewards.js`.
 * **Match length / number of players / intro and results duration:** `server/config.js`.
 * **Colours, hats, skins, floor looks:** names and colours are in `public/js/constants.js`;
   the drawing code (`drawHat`, `drawSkin`, `drawTileDeco`) is in `public/js/renderer.js`.
@@ -301,11 +389,13 @@ network code never need to know which game is running. To add one:
    `_titles()` (funny titles) and what to include in the snapshot.
 2. Give it a `VARIANTS` table (name, tagline, theme, small rule tweaks) and a `GAME_ID`.
 3. Register it in `server/games/index.js` (one line in `GAMES`). Its variants join the
-   match schedule automatically.
+   match schedule automatically. (Does your game have secrets, like hidden players? Set
+   `this.perViewer = true` and fill in `_visible()`, `_eventFor()` and the `viewerId` argument of
+   `_extraSnapshot()`. Then every player gets their own snapshot. See `propHunt.js`.)
 4. In the browser, add a small drawing function for its objects in `public/js/renderer.js`
    (see `drawArenaGame`) and, if it has new events, a `case` in `handleEvents` in
    `public/js/main.js`. Everything else (HUD, chips, results) already works.
-5. Add tests in `tests/minigames.test.js`, then run `npm test`.
+5. Add tests (see `tests/minigames2.test.js` for examples), then run `npm test`.
 
 After changing a server file, stop the server (`Ctrl+C`) and run `npm start` again.
 (`npm run dev` restarts automatically for you.) Changes to files in `public/` only need a browser refresh.
@@ -336,13 +426,13 @@ in Milestone 6, not as tested instructions:
 Nothing is saved on the server and there are no accounts. What exists today:
 
 * Your name, colour, hat and skin are remembered in your browser (`localStorage`).
-* Scores last for the match only.
+* Your **coins and the items you bought** are remembered the same way (`tm_wallet`).
+* Match scores last for the match only.
 
-When we add achievements and cosmetic unlocks (Milestone 5), the options are:
-`localStorage` (free and simple, but tied to one browser and editable by the player -
-fine for purely cosmetic unlocks), or accounts plus a database (progress follows you
-across devices and cannot be edited, but it adds sign-in, hosting cost and privacy
-duties). My recommendation is to start with `localStorage`.
+`localStorage` is free and simple but tied to one browser and editable by the player, which is
+fine for purely cosmetic unlocks. The alternative, accounts plus a database (progress follows
+you across devices and cannot be edited), adds sign-in, hosting cost and privacy duties. If you
+ever want coins to follow players between devices, that is the step to take.
 
 ---
 
@@ -366,7 +456,7 @@ duties). My recommendation is to start with `localStorage`.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 46 automated tests pass (and I ran the rules tests repeatedly to check they are not flaky).
+* All 155 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -379,10 +469,18 @@ duties). My recommendation is to start with `localStorage`.
   variants, 1-8 players) and always finished with valid results; their rules are covered by
   the tests above. The real page also played a 3-round Gold Grab, Hot Potato, Hill Hustle
   match in the simulated browser, and I looked at rendered images of every game.
+* **Real browsers:** I played the new games with three headless Chromium windows against the
+  real server and looked at screenshots from each player's point of view: the blindfolded
+  seeker, a hider disguised as a gift box with their "YOU" marker, meteor warnings and impacts,
+  and the crown. I also bought items in the shop, saw the items stay after a reload, watched coins
+  being paid in the results and final screens, and checked that reloading the page in the
+  middle of the final screen does not pay twice. No page errors appeared.
 * The new floors' *feel* (Moonbase jump height, Swamp Stomp steering, how fast Lava Lounge
   collapses) is untuned: the tests prove they run and finish, not that they are fun.
 * **The balance of the new minigames is untested by humans**: how many coins spawn, how
-  long the bomb fuse is, how big the hill is, how strong shoves are. These are first guesses
+  long the bomb fuse is, how big the hill is, how strong shoves are, how long Prop Hunt hiders
+  have to hide, how strong the seeker is, how fast meteors fall, and how long the crown lasts.
+  Likewise the **shop prices and coin rewards** are first guesses. These are first guesses
   and need a few real play sessions to tune.
 
 **Not verified (please check these yourself):**
@@ -394,13 +492,14 @@ duties). My recommendation is to start with `localStorage`.
 * Real internet play (nothing is deployed).
 
 **Known limitations in this milestone:**
-* Four minigames so far. More can be added with the steps in section 6.
+* Seven minigames so far. More can be added with the steps in section 6.
+* Prop Hunt with only two players is lopsided (one seeker, one hider); it is best with 4 or more.
 * Keyboard only; no touch/gamepad controls.
 * No bots, so solo testing means an idle second window.
 * Your own movement waits for the server's answer (a few milliseconds on a home
   network). A smoother "client-side prediction" is planned for Milestone 6.
-* Sounds are generated placeholders. Cosmetics are all free for now; unlockable
-  cosmetics and achievements are Milestone 5.
+* Sounds are generated placeholders. Achievements are not built yet.
+* Coins live in each player's own browser (see "Coins and the Shop").
 * Room data lives in memory: restarting the server ends all rooms.
 
 ---
@@ -411,9 +510,9 @@ duties). My recommendation is to start with `localStorage`.
 |---|---|
 | 1. Design decisions | Done: top-down 2D, Node + Socket.IO, server-authoritative, up to 8 players |
 | 2. First playable minigame | Done (and it is already networked, see the reordering note below) |
-| 3. Minigame framework + more minigames | **This version**: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle |
+| 3. Minigame framework + more minigames | Done: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle, Prop Hunt, Meteor Mayhem, Crown Chaos |
 | 4. Online multiplayer hardening | Mostly done early; remaining: deployment testing, stress tests |
-| 5. Sabotage variety, achievements, cosmetic unlocks | Planned |
+| 5. Sabotage variety, achievements, cosmetic unlocks | **Cosmetic unlocks done** (coin shop); sabotage variety and achievements planned |
 | 6. Polish, prediction, touch controls, deployment guide | Planned |
 
 **Why I reordered:** the brief suggests networking in Milestone 4, but I built the first

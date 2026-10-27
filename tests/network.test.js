@@ -505,7 +505,7 @@ test('a match can mix minigames: every game type runs over the network and score
 });
 
 test('each new minigame sends the snapshot fields the browser draws', async () => {
-  for (const [game, key] of [['goldGrab', 'cn'], ['hotPotato', 'bomb'], ['hillHustle', 'zone']]) {
+  for (const [game, key] of [['goldGrab', 'cn'], ['hotPotato', 'bomb'], ['hillHustle', 'zone'], ['propHunt', 'props'], ['meteorMayhem', 'mt'], ['crownChaos', 'crown']]) {
     await withServer({ SCHEDULE_OVERRIDE: [{ game, variant: 'classic' }] }, { timeScale: 8 }, async ({ mk }) => {
       const host = await mk();
       await ask(host, 'room:create', { name: 'Solo' });
@@ -521,4 +521,116 @@ test('each new minigame sends the snapshot fields the browser draws', async () =
       assert.equal(host.state.intro.gameId, game);
     });
   }
+});
+
+test('shop coins: results rows and the final standings carry server-decided coin rewards', async () => {
+  await withServer({}, { timeScale: 25 }, async ({ mk }) => {
+    const host = await mk();
+    const guest = await mk();
+    const { code } = await ask(host, 'room:create', { name: 'Host' });
+    await ask(guest, 'room:join', { code, name: 'Guest' });
+    await ask(host, 'room:rounds', 1);
+    await until(() => host.state.players.length === 2, 2000, 'both joined');
+    let resultsSeen = null;
+    host.on('room:state', (s) => {
+      if (s.phase === 'results' && s.results && !resultsSeen) resultsSeen = JSON.parse(JSON.stringify(s.results));
+    });
+    assert.equal((await ask(host, 'match:start', null)).ok, true);
+    await until(() => host.state.phase === 'final', 15000, 'final');
+
+    assert.ok(resultsSeen, 'saw a results screen');
+    assert.match(resultsSeen.matchId, /^[0-9a-z]+-1$/);
+    for (const row of resultsSeen.rows) {
+      assert.ok(Number.isInteger(row.coins) && row.coins >= 10, `with company everybody earns the participation coins (got ${row.coins})`);
+      assert.ok(Array.isArray(row.coinParts) && row.coinParts.length >= 1);
+    }
+    const f = host.state.final;
+    assert.equal(f.matchId, resultsSeen.matchId, 'results and final belong to the same match');
+    for (const e of f.standings) assert.ok(e.bonus === 5 || e.bonus === 10, `final bonus is 5 or 10 (got ${e.bonus})`);
+    assert.ok(f.standings.filter((e) => e.place === 1).every((e) => e.bonus === 10));
+  });
+});
+
+test('shop coins: a second match gets a new match id, so it can be paid again', async () => {
+  await withServer({}, { timeScale: 25 }, async ({ mk }) => {
+    const host = await mk();
+    await ask(host, 'room:create', { name: 'Solo' });
+    await ask(host, 'room:rounds', 1);
+    await ask(host, 'match:start', null);
+    await until(() => host.state.phase === 'final', 15000, 'first final');
+    const first = host.state.final.matchId;
+    await ask(host, 'match:start', null);
+    await until(() => host.state.phase === 'final' && host.state.final.matchId !== first, 15000, 'second final');
+    assert.notEqual(host.state.final.matchId, first);
+  });
+});
+
+test('shop coins: practicing alone pays only the small flat amount and no final bonus', async () => {
+  await withServer({}, { timeScale: 25 }, async ({ mk }) => {
+    const host = await mk();
+    await ask(host, 'room:create', { name: 'Solo' });
+    await ask(host, 'room:rounds', 1);
+    let seen = null;
+    host.on('room:state', (s) => {
+      if (s.phase === 'results' && s.results && !seen) seen = JSON.parse(JSON.stringify(s.results));
+    });
+    await ask(host, 'match:start', null);
+    await until(() => host.state.phase === 'final', 15000, 'final');
+    assert.equal(seen.rows.length, 1);
+    assert.equal(seen.rows[0].coins, 3);
+    assert.equal(host.state.final.standings[0].bonus, 0);
+  });
+});
+
+test('Prop Hunt over the network: the seeker is never sent where the disguised hiders are', async () => {
+  await withServer({ SCHEDULE_OVERRIDE: [{ game: 'propHunt', variant: 'classic' }] }, { timeScale: 5 }, async ({ mk }) => {
+    const socks = [await mk(), await mk(), await mk()];
+    const created = await ask(socks[0], 'room:create', { name: 'A' });
+    const ids = [created.playerId];
+    for (const [i, s] of socks.slice(1).entries()) ids.push((await ask(s, 'room:join', { code: created.code, name: `P${i + 2}` })).playerId);
+    await until(() => socks[0].state.players.length === 3, 3000, 'three players');
+    await ask(socks[0], 'room:rounds', 1);
+    assert.equal((await ask(socks[0], 'match:start', null)).ok, true);
+    await until(() => socks.every((s) => s.snaps.length > 0), 8000, 'snapshots for everyone');
+
+    const last = (s) => s.snaps[s.snaps.length - 1];
+    const meIn = (s, id) => last(s).ps.find((p) => p.id === id);
+    const seekerIdx = ids.findIndex((id, i) => (meIn(socks[i], id) || {}).rl === 1);
+    assert.ok(seekerIdx >= 0, 'one of the players is the seeker');
+    const seeker = socks[seekerIdx];
+    const hiders = socks.map((s, i) => ({ s, id: ids[i] })).filter((_, i) => i !== seekerIdx);
+
+    // While the seeker is blindfolded they see nothing but themselves.
+    await until(() => last(seeker).blind === 1 || last(seeker).hl === 0, 4000, 'blindfold phase or already over');
+    const early = seeker.snaps.find((s) => s.blind === 1);
+    if (early) {
+      assert.equal(early.props.length, 0);
+      assert.deepEqual(early.ps.map((p) => p.id), [ids[seekerIdx]]);
+    }
+
+    // Once the hunt starts, both hiders disguise themselves.
+    await until(() => last(seeker).hl === 0 && last(seeker).t > 0 && last(seeker).props.length > 0, 15000, 'hunt started');
+    const decoys = last(seeker).props.length;
+    for (const h of hiders) {
+      h.s.emit('game:input', { mx: 0, my: 0, jump: false, shove: true });
+      await sleep(60);
+      h.s.emit('game:input', { mx: 0, my: 0, jump: false, shove: false });
+    }
+    await until(() => last(seeker).props.length === decoys + 2, 5000, 'two more props appeared for the seeker');
+
+    const view = last(seeker);
+    for (const h of hiders) {
+      assert.ok(!view.ps.some((p) => p.id === h.id), 'the seeker\'s snapshot does not list a disguised hider');
+      const mine = meIn(h.s, h.id);
+      assert.equal(mine && mine.dg, 1, 'but the hider knows they are disguised');
+    }
+    assert.ok(view.props.every((p) => Array.isArray(p) && p.length === 3), 'props carry no ids or flags');
+    // ...and nothing ever leaked: scan every snapshot the seeker ever received
+    for (const s of seeker.snaps) {
+      for (const h of hiders) {
+        const listed = s.ps.find((p) => p.id === h.id);
+        if (listed) assert.ok(!listed.dg, 'no disguise flag for others');
+      }
+    }
+  });
 });

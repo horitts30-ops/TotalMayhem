@@ -15,6 +15,7 @@
 
 const { randomId, makeRoomCode, cleanName, randomSillyName, safeInt } = require('./util');
 const games = require('./games');
+const { roundReward, finalReward } = require('./rewards');
 
 class Room {
   constructor(io, code, cfg, gameOptions) {
@@ -39,12 +40,19 @@ class Room {
     this.finishAt = 0;
     this.results = null;
     this.final = null;
+    this.matchNo = 0; // counts matches in this room (the shop uses it so coins are paid once)
+    this.hadCompany = false; // did any round of this match have 2+ players?
 
     this.createdAt = Date.now();
     this.lastConnectedAt = Date.now();
   }
 
   // ------------------------------------------------------------------ players
+  // A label that is unique to this match, so the shop can never pay a match twice.
+  matchId() {
+    return `${this.createdAt.toString(36)}-${this.matchNo}`;
+  }
+
   connectedPlayers() {
     return [...this.players.values()].filter((p) => p.connected);
   }
@@ -169,6 +177,8 @@ class Room {
       p.ready = false;
     }
     this.round = 0;
+    this.matchNo += 1;
+    this.hadCompany = false;
     this.final = null;
     this.results = null;
     // (Tests can pin the schedule with cfg.SCHEDULE_OVERRIDE = [{game, variant}, ...])
@@ -226,11 +236,16 @@ class Room {
   beginResults() {
     const rows = this.game.results();
     const players = this.players;
+    const company = rows.filter((r) => !r.abandoned).length >= 2;
+    if (company) this.hadCompany = true;
     const outRows = rows.map((r) => {
       const p = players.get(r.id);
       if (p) p.score += r.points;
+      const reward = roundReward(r, company ? 2 : 1);
       return {
         ...r,
+        coins: reward.coins,
+        coinParts: reward.parts,
         name: p ? p.name : 'Player',
         color: p ? p.color : 0,
         hat: p ? p.hat : 0,
@@ -238,7 +253,7 @@ class Room {
         total: p ? p.score : 0,
       };
     });
-    this.results = { round: this.round, rounds: this.rounds, rows: outRows };
+    this.results = { matchId: this.matchId(), round: this.round, rounds: this.rounds, rows: outRows };
     this.phase = 'results';
     this.phaseEndsAt = Date.now() + this.cfg.RESULTS_MS;
     this.broadcastState();
@@ -253,7 +268,8 @@ class Room {
       if (i > 0 && e.score !== list[i - 1].score) place = i + 1;
       e.place = place;
     });
-    this.final = { standings: list, winners: list.filter((e) => e.place === 1).map((e) => e.id) };
+    for (const e of list) e.bonus = finalReward(e, this.hadCompany);
+    this.final = { matchId: this.matchId(), standings: list, winners: list.filter((e) => e.place === 1).map((e) => e.id) };
     this.phase = 'final';
     this.phaseEndsAt = 0;
     this.game = null;
@@ -305,6 +321,15 @@ class Room {
   // Send the current world to everybody in the room.
   flushSnapshot() {
     if (this.phase !== 'playing' || !this.game) return;
+    // Games with secrets (Prop Hunt) send each player their own view.
+    if (this.game.perViewer) {
+      const people = this.connectedPlayers();
+      const views = this.game.snapshotsByViewer(people.map((p) => p.id));
+      for (const p of people) {
+        if (p.socketId) this.io.to(p.socketId).emit('game:snap', views.get(p.id) || views.get('*'));
+      }
+      return;
+    }
     this.io.to(this.code).emit('game:snap', this.game.snapshot());
   }
 

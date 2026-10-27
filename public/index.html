@@ -29,6 +29,7 @@
             <button class="mini" id="title-skin-next" aria-label="Next skin">&#9654;</button>
           </div>
           <div id="title-swatches" class="swatches"></div>
+          <button class="btn small shop-btn" id="title-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
         </div>
 
         <div class="form-col">
@@ -83,6 +84,7 @@
           <span id="lobby-skin-name" class="hat-name">Plain</span>
           <button class="mini" id="lobby-skin-next" aria-label="Next skin">&#9654;</button>
         </div>
+        <button class="btn small shop-btn" id="lobby-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
       </div>
 
       <div class="lobby-foot">
@@ -136,6 +138,7 @@
         <div class="panel results-panel">
           <div id="results-head" class="panel-head"></div>
           <div id="results-rows" class="rows"></div>
+          <div id="results-coins" class="earn hidden"></div>
           <div id="results-foot" class="panel-foot"></div>
         </div>
       </div>
@@ -144,13 +147,40 @@
         <div class="panel final-panel">
           <div class="panel-head">Final standings</div>
           <div id="final-winner" class="final-winner"></div>
+          <div id="final-coins" class="earn hidden"></div>
           <div id="final-rows" class="rows"></div>
           <div id="final-actions" class="final-actions">
             <button id="btn-again" class="btn big">Play again</button>
             <button id="btn-tolobby" class="btn ghost">Back to lobby</button>
+            <button id="final-shop" class="btn shop-btn" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
             <button id="btn-leave2" class="btn ghost">Leave</button>
           </div>
           <div id="final-wait" class="hint"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ================================ SHOP ================================ -->
+  <div id="overlay-shop" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Shop">
+    <div class="shop-panel">
+      <div class="shop-head">
+        <h2>Shop</h2>
+        <div class="wallet-chip" title="Your coins"><span class="coin"></span> <b id="shop-coins">0</b></div>
+        <button id="shop-close" class="btn small ghost" type="button">Close</button>
+      </div>
+      <div class="shop-body">
+        <div class="shop-preview">
+          <canvas id="shop-canvas" width="200" height="240"></canvas>
+          <div id="shop-item" class="shop-item"></div>
+          <button id="shop-action" class="btn" type="button">Equip</button>
+          <div id="shop-msg" class="shop-msg" role="status"></div>
+        </div>
+        <div class="shop-main">
+          <div id="shop-tabs" class="shop-tabs" role="tablist"></div>
+          <div id="shop-grid" class="shop-grid"></div>
+          <p class="shop-note">Earn coins by finishing rounds and matches with friends. Coins only buy cosmetics: no item changes how a game plays.</p>
         </div>
       </div>
     </div>

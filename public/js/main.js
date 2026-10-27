@@ -15,6 +15,10 @@ import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS } from './constants.js';
+import {
+  KINDS, KIND_LABEL, loadWallet, saveWallet, owns, credit, buy, nextOwned, sanitizeLook,
+  catalogue, nameOf as itemName, priceOf,
+} from './shop.js';
 
 const $ = (id) => document.getElementById(id);
 const INTERP_MS = 100; // other players are drawn this far in the past, for smoothness
@@ -27,7 +31,8 @@ const S = {
   phaseEndsAt: 0,
   snaps: [], // recent world snapshots: { r: receivedAtMs, s: snapshot }
   meta: new Map(), // player id -> { name, color, hat, skin }
-  look: loadLook(),
+  wallet: loadWalletSafe(),
+  look: null, // filled in right below (it needs the wallet)
   theme: 'sunny',
   avatars: [], // little canvases that animate (menus, results)
   lastFrame: performance.now(),
@@ -38,6 +43,22 @@ const S = {
   booted: false,
 };
 
+function storage() {
+  try {
+    return window.localStorage;
+  } catch (e) {
+    return null;
+  }
+}
+function loadWalletSafe() {
+  const st = storage();
+  return st ? loadWallet(st) : loadWallet({ getItem: () => null });
+}
+function saveWalletNow() {
+  const st = storage();
+  if (st) saveWallet(st, S.wallet);
+}
+
 function loadLook() {
   let saved = {};
   try {
@@ -45,12 +66,15 @@ function loadLook() {
   } catch (e) {
     saved = {};
   }
-  return {
+  const ownedColors = S.wallet.owned.color;
+  const look = {
     name: typeof saved.name === 'string' ? saved.name : '',
-    color: Number.isInteger(saved.color) ? saved.color % COLORS.length : Math.floor(Math.random() * COLORS.length),
+    color: Number.isInteger(saved.color) ? saved.color % COLORS.length : ownedColors[Math.floor(Math.random() * ownedColors.length)],
     hat: Number.isInteger(saved.hat) && saved.hat >= 0 ? saved.hat % HATS.length : 0,
     skin: Number.isInteger(saved.skin) && saved.skin >= 0 ? saved.skin % SKINS.length : 0,
   };
+  // Never wear something you have not bought (e.g. an old saved look).
+  return { ...look, ...sanitizeLook(S.wallet, look), name: look.name };
 }
 function saveLook() {
   try {
@@ -59,6 +83,8 @@ function saveLook() {
     /* ignore */
   }
 }
+
+S.look = loadLook();
 
 const renderer = new Renderer($('game-canvas'));
 
@@ -147,33 +173,45 @@ function mountPicker(prefix) {
     b.style.background = c.hex;
     b.title = c.name;
     b.addEventListener('click', () => {
+      if (!owns(S.wallet, 'color', i)) {
+        openShop('color', i);
+        return;
+      }
       S.look.color = i;
       lookChanged();
     });
     swatchesEl.appendChild(b);
   });
-  const step = (key, list, dir) => {
-    S.look[key] = (S.look[key] + list.length + dir) % list.length;
+  // The < > buttons only cycle through things you own.
+  const step = (key, dir) => {
+    S.look[key] = nextOwned(S.wallet, key, S.look[key], dir);
     lookChanged();
   };
-  $(`${prefix}-hat-prev`).addEventListener('click', () => step('hat', HATS, -1));
-  $(`${prefix}-hat-next`).addEventListener('click', () => step('hat', HATS, 1));
-  $(`${prefix}-skin-prev`).addEventListener('click', () => step('skin', SKINS, -1));
-  $(`${prefix}-skin-next`).addEventListener('click', () => step('skin', SKINS, 1));
+  $(`${prefix}-hat-prev`).addEventListener('click', () => step('hat', -1));
+  $(`${prefix}-hat-next`).addEventListener('click', () => step('hat', 1));
+  $(`${prefix}-skin-prev`).addEventListener('click', () => step('skin', -1));
+  $(`${prefix}-skin-next`).addEventListener('click', () => step('skin', 1));
+  const shopBtn = $(`${prefix}-shop`);
+  if (shopBtn) shopBtn.addEventListener('click', () => openShop());
   pickers.push({ swatchesEl, hatEl: $(`${prefix}-hat-name`), skinEl: $(`${prefix}-skin-name`) });
 }
 
 function refreshPickers() {
   for (const p of pickers) {
-    [...p.swatchesEl.children].forEach((b, i) => b.classList.toggle('on', i === S.look.color));
+    [...p.swatchesEl.children].forEach((b, i) => {
+      b.classList.toggle('on', i === S.look.color);
+      b.classList.toggle('locked', !owns(S.wallet, 'color', i));
+    });
     p.hatEl.textContent = HATS[S.look.hat];
     p.skinEl.textContent = SKINS[S.look.skin];
   }
+  for (const c of document.querySelectorAll('.coin-count')) c.textContent = String(S.wallet.coins);
 }
 
 function lookChanged() {
   saveLook();
   refreshPickers();
+  if (SHOP.open) renderShop();
   sfx.click();
   if (S.room && (S.room.phase === 'lobby' || S.room.phase === 'final')) {
     socket.emit('room:customize', { color: S.look.color, hat: S.look.hat, skin: S.look.skin });
@@ -382,6 +420,174 @@ function renderFinal(st) {
   $('final-wait').textContent = host ? '' : 'Waiting for the host to pick what happens next…';
 }
 
+// =============================================================== shop + coins
+// Coins are paid out once per round / match (the server sends the amount and a
+// unique id; shop.js remembers which ids were already paid).
+function creditFromState(st) {
+  if (!S.me) return;
+  let gained = 0;
+  let parts = [];
+  let total = 0;
+  if (st.phase === 'results' && st.results) {
+    const row = st.results.rows.find((r) => r.id === S.me);
+    if (!row) return;
+    total = row.coins || 0;
+    parts = row.coinParts || [];
+    gained = credit(S.wallet, total, `${st.results.matchId}:r${st.results.round}`);
+    showEarned('results-coins', total, parts);
+  } else if (st.phase === 'final' && st.final) {
+    const e = st.final.standings.find((x) => x.id === S.me);
+    if (!e) return;
+    total = e.bonus || 0;
+    parts = [e.place === 1 ? 'match win' : 'finished the match'];
+    gained = credit(S.wallet, total, `${st.final.matchId}:final`);
+    showEarned('final-coins', total, parts);
+  } else {
+    return;
+  }
+  if (gained > 0) {
+    saveWalletNow();
+    refreshPickers();
+    sfx.coin();
+  }
+}
+
+function showEarned(id, total, parts) {
+  const box = $(id);
+  box.classList.toggle('hidden', total <= 0);
+  if (total <= 0) return;
+  box.textContent = '';
+  const c = el('span', 'coin');
+  box.appendChild(c);
+  box.appendChild(document.createTextNode(` +${total} coins`));
+  if (parts.length) box.appendChild(el('small', null, `(${parts.join(', ')})`));
+}
+
+const SHOP = { kind: 'hat', sel: { hat: 0, skin: 0, color: 0 }, open: false };
+
+function shopLook() {
+  return { ...S.look, [SHOP.kind]: SHOP.sel[SHOP.kind] };
+}
+
+function openShop(kind, index) {
+  SHOP.open = true;
+  SHOP.kind = KINDS.includes(kind) ? kind : SHOP.kind;
+  for (const k of KINDS) SHOP.sel[k] = S.look[k];
+  if (KINDS.includes(kind) && Number.isInteger(index)) SHOP.sel[kind] = index;
+  $('overlay-shop').classList.remove('hidden');
+  $('shop-msg').textContent = '';
+  renderShop();
+  sfx.click();
+}
+
+function closeShop() {
+  SHOP.open = false;
+  $('overlay-shop').classList.add('hidden');
+}
+
+function wearing(kind, index) {
+  return S.look[kind] === index;
+}
+
+function renderShop() {
+  $('shop-coins').textContent = String(S.wallet.coins);
+
+  const tabs = $('shop-tabs');
+  tabs.textContent = '';
+  for (const k of KINDS) {
+    const b = el('button', 'shop-tab' + (k === SHOP.kind ? ' on' : ''), KIND_LABEL[k]);
+    b.type = 'button';
+    const have = S.wallet.owned[k].length;
+    b.appendChild(el('small', null, `${have}/${catalogue(k).length}`));
+    b.addEventListener('click', () => {
+      SHOP.kind = k;
+      $('shop-msg').textContent = '';
+      renderShop();
+    });
+    tabs.appendChild(b);
+  }
+
+  const grid = $('shop-grid');
+  grid.textContent = '';
+  for (const item of catalogue(SHOP.kind)) {
+    const owned = owns(S.wallet, item.kind, item.index);
+    const card = el('button', 'shop-card');
+    card.type = 'button';
+    if (!owned) card.classList.add('locked');
+    if (owned && wearing(item.kind, item.index)) card.classList.add('worn');
+    if (SHOP.sel[item.kind] === item.index) card.classList.add('sel');
+    if (item.kind === 'color') {
+      const dot = el('div', 'dot');
+      dot.style.background = COLORS[item.index].hex;
+      card.appendChild(dot);
+    } else {
+      const cv = el('canvas');
+      cv.width = 64;
+      cv.height = 80;
+      card.appendChild(cv);
+      drawPreview(cv, { ...S.look, [item.kind]: item.index }, 0);
+    }
+    card.appendChild(el('div', 'nm', item.name));
+    card.appendChild(el('div', 'tag', owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : String(item.price)));
+    card.addEventListener('click', () => {
+      SHOP.sel[item.kind] = item.index;
+      $('shop-msg').textContent = '';
+      renderShop();
+    });
+    grid.appendChild(card);
+  }
+
+  const kind = SHOP.kind;
+  const idx = SHOP.sel[kind];
+  const owned = owns(S.wallet, kind, idx);
+  const price = priceOf(kind, idx);
+  $('shop-item').textContent = '';
+  $('shop-item').appendChild(el('small', null, KIND_LABEL[kind].replace(/s$/, '')));
+  $('shop-item').appendChild(document.createTextNode(itemName(kind, idx)));
+  const act = $('shop-action');
+  act.classList.remove('need');
+  if (owned && wearing(kind, idx)) {
+    act.textContent = 'Wearing it!';
+    act.disabled = true;
+  } else if (owned) {
+    act.textContent = 'Wear it';
+    act.disabled = false;
+  } else if (S.wallet.coins >= price) {
+    act.textContent = `Buy for ${price} coins`;
+    act.disabled = false;
+  } else {
+    act.textContent = `Need ${price - S.wallet.coins} more coins`;
+    act.disabled = true;
+    act.classList.add('need');
+  }
+}
+
+function shopAction() {
+  const kind = SHOP.kind;
+  const idx = SHOP.sel[kind];
+  const msg = $('shop-msg');
+  msg.classList.remove('good');
+  if (!owns(S.wallet, kind, idx)) {
+    const res = buy(S.wallet, kind, idx);
+    if (!res.ok) {
+      msg.textContent = res.error;
+      renderShop();
+      return;
+    }
+    saveWalletNow();
+    sfx.jackpot();
+    msg.textContent = 'Bought! Now wearing it.';
+    msg.classList.add('good');
+    const chip = document.querySelector('.wallet-chip');
+    chip.classList.remove('bump');
+    void chip.offsetWidth;
+    chip.classList.add('bump');
+  }
+  S.look[kind] = idx;
+  lookChanged();
+  renderShop();
+}
+
 // =============================================================== room state
 function applyRoomState(st) {
   const prev = S.room;
@@ -406,6 +612,9 @@ function applyRoomState(st) {
   if (st.phase === 'intro') renderIntro(st);
   if (st.phase === 'results') renderResults(st);
   if (st.phase === 'final') renderFinal(st);
+  creditFromState(st);
+  if (st.phase !== 'results') $('results-coins').classList.add('hidden');
+  if (st.phase !== 'final') $('final-coins').classList.add('hidden');
   if (st.phase !== 'playing') {
     $('overlay-countdown').classList.add('hidden');
     $('banner').classList.add('hidden');
@@ -587,6 +796,68 @@ function handleEvents(snap) {
         renderer.addShake(ev.id === S.me ? 22 : 14);
         sfx.boom();
         break;
+      case 'warn':
+        sfx.tick();
+        break;
+      case 'impact':
+        renderer.burst(OX + ev.x, OY + ev.y - 6, ['#ffb02e', '#ff595e', '#6b5b6e', '#ffe66d'], 22, 340, 'star', 0.8);
+        renderer.dust(OX + ev.x, OY + ev.y, '#d9d3e8', 10);
+        renderer.addShake(ev.hits ? 10 : 5);
+        sfx.boom();
+        break;
+      case 'meteorHit':
+        renderer.floatText(OX + ev.x, OY + ev.y - 70, ev.id === S.me ? 'OUCH!' : 'OOF!', '#ff8a8a', 28);
+        if (ev.id === S.me) renderer.addShake(14);
+        sfx.hit();
+        break;
+      case 'dodge':
+        renderer.floatText(OX + ev.x, OY + ev.y - 70, 'HOP!', '#9bffb0', 26);
+        if (mine) sfx.coin(1);
+        break;
+      case 'crown':
+        renderer.burst(OX + ev.x, OY + ev.y - 40, ['#ffd23f', '#fff27a', '#ffffff'], 14, 240, 'star', 0.7);
+        renderer.floatText(OX + ev.x, OY + ev.y - 80, ev.id === S.me ? 'CROWNED!' : `${nameOf(ev.id)}!`, '#ffe66d', 28);
+        sfx.jackpot();
+        break;
+      case 'crownDrop':
+        renderer.burst(OX + ev.x, OY + ev.y - 40, ['#ffd23f', '#ffffff'], 10, 260, 'circle', 0.5);
+        sfx.drop();
+        break;
+      case 'overheat':
+        renderer.burst(OX + ev.x, OY + ev.y - 40, ['#ff7a3d', '#ffd23f', '#ff595e'], 20, 320, 'star', 0.8);
+        renderer.floatText(OX + ev.x, OY + ev.y - 90, 'TOO HOT!', '#ff8a3d', 32);
+        renderer.addShake(8);
+        sfx.boom();
+        break;
+      case 'disguise':
+      case 'undisguise':
+      case 'swap':
+        renderer.burst(OX + ev.x, OY + ev.y - 24, ['#ffffff', '#cfd8ff', '#ffe66d'], ev.k === 'swap' ? 6 : 12, 160, 'circle', 0.5);
+        sfx.pass();
+        break;
+      case 'found':
+        renderer.burst(OX + ev.x, OY + ev.y - 30, ['#ffe66d', '#ff6fb5', '#ffffff'], 18, 280, 'star', 0.9);
+        renderer.floatText(OX + ev.x, OY + ev.y - 80, ev.id === S.me ? 'YOU WERE FOUND!' : `${nameOf(ev.id)} FOUND!`, '#fff27a', 28);
+        renderer.addShake(ev.id === S.me ? 14 : 7);
+        sfx.ko();
+        if (ev.id === S.me) toast('Found! You are not out: now help find the others!');
+        break;
+      case 'bonk':
+        renderer.floatText(OX + ev.x, OY + ev.y - 60, 'JUST A PROP!', '#ffb86b', 24);
+        renderer.burst(OX + ev.x, OY + ev.y - 20, ['#ffffff', '#c9a66b'], 8, 160, 'circle', 0.4);
+        sfx.deny();
+        break;
+      case 'seekStart':
+        toast('Ready or not, here they come!');
+        sfx.go();
+        renderer.addShake(6);
+        break;
+      case 'sweep':
+        toast('Every hider was found!');
+        break;
+      case 'newSeeker':
+        toast(ev.id === S.me ? 'The seeker left. You are the seeker now!' : `${nameOf(ev.id)} is the new seeker!`);
+        break;
       case 'zoneWarn':
         toast('The hill is about to move!');
         sfx.tick();
@@ -679,8 +950,10 @@ function updateHud(frame) {
 
   const mine = frame.latest.map.get(S.me);
   const ghost = !arenaGame && mine && mine.st === 'ghost';
-  $('ab-jump-label').textContent = ghost ? 'Float' : arenaGame ? arena.jumpLabel || 'Jump' : 'Jump';
-  $('ab-shove-label').textContent = ghost ? 'Drop goo' : arenaGame ? arena.shoveLabel || 'Shove' : 'Shove';
+  // (Prop Hunt sends labels that depend on your role: Disguise, Smack, Swap prop...)
+  const lb = frame.latest.lb;
+  $('ab-jump-label').textContent = ghost ? 'Float' : lb ? lb[0] : arenaGame ? arena.jumpLabel || 'Jump' : 'Jump';
+  $('ab-shove-label').textContent = ghost ? 'Drop goo' : lb ? lb[1] : arenaGame ? arena.shoveLabel || 'Shove' : 'Shove';
   const fill = $('ab-shove-fill');
   let frac = 1;
   if (mine && mine.st === 'alive') frac = 1 - Math.min(1, mine.cd / arena.shoveCooldown);
@@ -690,12 +963,17 @@ function updateHud(frame) {
 
   // Scoreboard chips (rebuilt only when something changes)
   // (In the arena games the chips show this round's score: coins, booms, seconds.)
-  const sig = st.players.map((p) => `${p.id}:${p.score}:${(frame.latest.map.get(p.id) || {}).st}:${(frame.latest.map.get(p.id) || {}).rs}`).join('|');
+  // Hidden players (Prop Hunt) are not in the players list, so their score comes from `sc`.
+  const roundScore = (p) => {
+    const e = frame.latest.map.get(p.id);
+    if (e && e.rs !== undefined) return e.rs;
+    return (frame.latest.sc && frame.latest.sc[p.id]) || 0;
+  };
+  const sig = st.players.map((p) => `${p.id}:${p.score}:${(frame.latest.map.get(p.id) || {}).st}:${roundScore(p)}`).join('|');
   if (sig !== S.hudSig) {
     S.hudSig = sig;
     const box = $('hud-scores');
     box.textContent = '';
-    const roundScore = (p) => ((frame.latest.map.get(p.id) || {}).rs || 0);
     const list = [...st.players];
     if (arenaGame) {
       const dir = arena.scoreDir === 'low' ? 1 : -1;
@@ -757,6 +1035,17 @@ function updateHud(frame) {
   } else if (st.phase === 'playing' && arenaGame && mine && mine.bm && t >= 0 && !frame.finished) {
     banner.textContent = 'YOU HAVE THE BOMB! Shove someone to pass it on!';
     banner.classList.remove('hidden');
+  } else if (st.phase === 'playing' && gid === 'propHunt' && mine && t >= 0 && !frame.finished) {
+    const L = frame.latest;
+    let msg = '';
+    if (mine.rl && L.hl > 0) msg = 'You are the SEEKER! Eyes closed while they hide...';
+    else if (mine.rl && mine.hp) msg = 'You were found, so now you help hunt! E = smack a suspicious prop';
+    else if (mine.rl) msg = 'You are the SEEKER! Press E to smack the prop you think is a player';
+    else if (mine.dg) msg = 'You are a PROP! Stay still. SPACE swaps prop, E turns back';
+    else if (L.hl > 0) msg = 'You are a HIDER! Stand near props and press E to disguise';
+    else if (frame.aliveCount > 1) msg = 'Press E to disguise as a prop, then keep still!';
+    banner.textContent = msg;
+    banner.classList.toggle('hidden', !msg);
   } else {
     banner.classList.add('hidden');
   }
@@ -815,6 +1104,17 @@ function bindUi() {
   });
   $('name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') ($('code-input').value.length === 4 ? joinRoom() : createRoom());
+  });
+
+  $('shop-close').addEventListener('click', closeShop);
+  $('shop-action').addEventListener('click', shopAction);
+  $('final-shop').addEventListener('click', () => openShop());
+  $('overlay-shop').addEventListener('pointerdown', (e) => {
+    if (e.target === $('overlay-shop')) closeShop();
+  });
+  addAvatar($('shop-canvas'), () => shopLook());
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && SHOP.open) closeShop();
   });
 
   $('btn-leave').addEventListener('click', leaveRoom);
