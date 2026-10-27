@@ -30,6 +30,7 @@
           </div>
           <div id="title-swatches" class="swatches"></div>
           <button class="btn small shop-btn" id="title-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
+          <button class="btn small shop-btn trophy-btn" id="title-trophies" type="button">&#127942; Trophies <b class="trophy-count">0</b></button>
         </div>
 
         <div class="form-col">
@@ -85,6 +86,7 @@
           <button class="mini" id="lobby-skin-next" aria-label="Next skin">&#9654;</button>
         </div>
         <button class="btn small shop-btn" id="lobby-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
+        <button class="btn small shop-btn trophy-btn" id="lobby-trophies" type="button">&#127942; Trophies <b class="trophy-count">0</b></button>
       </div>
 
       <div class="lobby-foot">
@@ -130,7 +132,25 @@
           <p id="intro-tagline" class="intro-tagline"></p>
           <ol id="intro-steps" class="intro-steps"></ol>
           <div id="intro-controls" class="intro-controls"></div>
+          <div id="intro-power" class="intro-power hidden"></div>
           <div id="intro-count" class="intro-count"></div>
+        </div>
+      </div>
+
+      <div id="overlay-pitstop" class="overlay solid hidden">
+        <div class="panel pit-panel">
+          <div class="pit-head">
+            <div class="panel-head">Pit stop!</div>
+            <div class="pit-purse" title="Your pit-stop purse. It starts at 0 every match and is only for this screen."><span class="coin blue"></span> <b id="pit-purse">0</b></div>
+          </div>
+          <div id="pit-note" class="pit-note"></div>
+          <div id="pit-offers" class="pit-offers"></div>
+          <div id="pit-msg" class="shop-msg"></div>
+          <div id="pit-others" class="pit-others"></div>
+          <div class="pit-foot">
+            <button id="pit-done" class="btn big" type="button">I'm ready</button>
+            <div id="pit-count" class="pit-count"></div>
+          </div>
         </div>
       </div>
 
@@ -139,6 +159,7 @@
           <div id="results-head" class="panel-head"></div>
           <div id="results-rows" class="rows"></div>
           <div id="results-coins" class="earn hidden"></div>
+          <div id="results-purse" class="earn blue hidden"></div>
           <div id="results-foot" class="panel-foot"></div>
         </div>
       </div>
@@ -153,6 +174,7 @@
             <button id="btn-again" class="btn big">Play again</button>
             <button id="btn-tolobby" class="btn ghost">Back to lobby</button>
             <button id="final-shop" class="btn shop-btn" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
+            <button id="final-trophies" class="btn shop-btn trophy-btn" type="button">&#127942; Trophies <b class="trophy-count">0</b></button>
             <button id="btn-leave2" class="btn ghost">Leave</button>
           </div>
           <div id="final-wait" class="hint"></div>
@@ -186,9 +208,24 @@
     </div>
   </div>
 
+  <!-- ============================== TROPHIES ============================== -->
+  <div id="overlay-trophies" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Trophies">
+    <div class="shop-panel">
+      <div class="shop-head">
+        <h2>Trophies</h2>
+        <div class="wallet-chip" title="Achievements unlocked">&#127942; <b id="trophy-total">0/0</b></div>
+        <button id="trophy-close" class="btn small ghost" type="button">Close</button>
+      </div>
+      <div id="trophy-grid" class="trophy-grid"></div>
+      <p class="shop-note">Some trophies give a special hat or skin that coins cannot buy. Wins and finished matches only count when other players are in the room.</p>
+    </div>
+  </div>
+
+  <div id="unlocks" class="unlocks" aria-live="polite"></div>
   <div id="conn-banner" class="conn hidden">Connection lost. Reconnecting&hellip;</div>
   <div id="toast" class="toast"></div>
-  <button id="mute-btn" class="mute" title="Mute / unmute (M)" aria-label="Toggle sound">&#128266;</button>
+  <button id="music-btn" class="mute music" title="Music on / off (N)" aria-label="Toggle music">&#127925;</button>
+  <button id="mute-btn" class="mute" title="Mute / unmute all sound (M)" aria-label="Toggle sound">&#128266;</button>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/main.js"></script>

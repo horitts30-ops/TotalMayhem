@@ -16,6 +16,7 @@
 const { randomId, makeRoomCode, cleanName, randomSillyName, safeInt } = require('./util');
 const games = require('./games');
 const { roundReward, finalReward } = require('./rewards');
+const powerups = require('./powerups');
 
 class Room {
   constructor(io, code, cfg, gameOptions) {
@@ -87,6 +88,9 @@ class Room {
       connected: true,
       socketId: null,
       score: 0,
+      purse: 0, // pit-stop coins for power-ups (reset every match)
+      power: [], // power-ups carried into the next round: [{ id, paid }]
+      done: false, // finished shopping
       disconnectedAt: 0,
     };
     this.players.set(player.id, player);
@@ -174,6 +178,9 @@ class Room {
     }
     for (const p of this.players.values()) {
       p.score = 0;
+      p.purse = 0;
+      p.power = [];
+      p.done = false;
       p.ready = false;
     }
     this.round = 0;
@@ -226,7 +233,13 @@ class Room {
       return;
     }
     this.participants = new Set(participants.map((p) => p.id));
-    this.game = games.createGame(this.slot, participants, this.gameOptions);
+    // Power-ups bought in the pit stop become per-player multipliers for this round.
+    const mods = {};
+    for (const p of participants) {
+      const pl = this.players.get(p.id);
+      if (pl && pl.power.length) mods[p.id] = powerups.combine(pl.power.map((x) => x.id));
+    }
+    this.game = games.createGame(this.slot, participants, { ...this.gameOptions, mods });
     this.phase = 'playing';
     this.finishAt = 0;
     this.phaseEndsAt = 0;
@@ -242,6 +255,10 @@ class Room {
       const p = players.get(r.id);
       if (p) p.score += r.points;
       const reward = roundReward(r, company ? 2 : 1);
+      if (p) {
+        p.purse += reward.coins; // the same amount also fills the pit-stop purse
+        p.power = []; // this round's power-ups are used up
+      }
       return {
         ...r,
         coins: reward.coins,
@@ -253,7 +270,15 @@ class Room {
         total: p ? p.score : 0,
       };
     });
-    this.results = { matchId: this.matchId(), round: this.round, rounds: this.rounds, rows: outRows };
+    this.results = {
+      matchId: this.matchId(),
+      round: this.round,
+      rounds: this.rounds,
+      game: this.slot ? this.slot.game : '', // lets the browser's trophy case know which minigame this was
+      variant: this.slot ? this.slot.variant : '',
+      players: rows.filter((r) => !r.abandoned).length,
+      rows: outRows,
+    };
     this.phase = 'results';
     this.phaseEndsAt = Date.now() + this.cfg.RESULTS_MS;
     this.broadcastState();
@@ -269,10 +294,71 @@ class Room {
       e.place = place;
     });
     for (const e of list) e.bonus = finalReward(e, this.hadCompany);
-    this.final = { matchId: this.matchId(), standings: list, winners: list.filter((e) => e.place === 1).map((e) => e.id) };
+    this.final = { matchId: this.matchId(), players: list.length, rounds: this.rounds, standings: list, winners: list.filter((e) => e.place === 1).map((e) => e.id) };
     this.phase = 'final';
     this.phaseEndsAt = 0;
     this.game = null;
+    this.broadcastState();
+  }
+
+  // ------------------------------------------------------------ pit stop
+  // Skip the shop when nobody could afford even the cheapest power-up.
+  pitstopWorthIt() {
+    if (!(this.cfg.PITSTOP_MS > 0)) return false;
+    const cheapest = powerups.cheapestPrice();
+    return this.connectedPlayers().some((p) => p.purse >= cheapest);
+  }
+
+  beginPitstop() {
+    for (const p of this.players.values()) p.done = false;
+    this.phase = 'pitstop';
+    this.phaseEndsAt = Date.now() + this.cfg.PITSTOP_MS;
+    this.broadcastState();
+  }
+
+  // Last place (when there are 3+ players) pays less. Ties for last all count.
+  isUnderdog(player) {
+    const list = [...this.players.values()];
+    if (list.length < 3) return false;
+    const lowest = Math.min(...list.map((p) => p.score));
+    const highest = Math.max(...list.map((p) => p.score));
+    return lowest < highest && player.score === lowest;
+  }
+
+  buyPowerup(playerId, id) {
+    const p = this.players.get(playerId);
+    if (!p) return 'You are not in this room.';
+    if (this.phase !== 'pitstop') return 'The pit stop is only open between rounds.';
+    const def = powerups.getPowerup(id);
+    if (!def) return 'No such power-up.';
+    if (p.power.some((x) => x.id === def.id)) return 'You already have that one.';
+    if (p.power.length >= powerups.MAX_SLOTS) return `You can carry ${powerups.MAX_SLOTS} power-ups at most.`;
+    const price = powerups.priceFor(def, this.isUnderdog(p));
+    if (p.purse < price) return `You need ${price - p.purse} more coins for that.`;
+    p.purse -= price;
+    p.power.push({ id: def.id, paid: price });
+    p.done = false;
+    this.broadcastState();
+    return null;
+  }
+
+  // Changed your mind? Until the pit stop closes you get every coin back.
+  refundPowerup(playerId, id) {
+    const p = this.players.get(playerId);
+    if (!p) return 'You are not in this room.';
+    if (this.phase !== 'pitstop') return 'The pit stop is only open between rounds.';
+    const i = p.power.findIndex((x) => x.id === id);
+    if (i < 0) return 'You do not have that power-up.';
+    p.purse += p.power[i].paid;
+    p.power.splice(i, 1);
+    this.broadcastState();
+    return null;
+  }
+
+  setShopDone(playerId, done) {
+    const p = this.players.get(playerId);
+    if (!p || this.phase !== 'pitstop') return;
+    p.done = done !== false;
     this.broadcastState();
   }
 
@@ -308,8 +394,13 @@ class Room {
         if (now >= this.finishAt) this.beginResults();
       }
     } else if (this.phase === 'results' && now >= this.phaseEndsAt) {
-      if (this.round < this.rounds) this.beginIntro();
-      else this.beginFinal();
+      if (this.round >= this.rounds) this.beginFinal();
+      else if (this.pitstopWorthIt()) this.beginPitstop();
+      else this.beginIntro();
+    } else if (this.phase === 'pitstop') {
+      const live = this.connectedPlayers();
+      const everyoneDone = live.length > 0 && live.every((p) => p.done);
+      if (now >= this.phaseEndsAt || everyoneDone) this.beginIntro();
     }
   }
 
@@ -344,6 +435,7 @@ class Room {
     const now = Date.now();
     return {
       code: this.code,
+      matchId: this.matchId(),
       hostId: this.hostId,
       phase: this.phase,
       round: this.round,
@@ -362,7 +454,13 @@ class Room {
         connected: p.connected,
         score: p.score,
         inRound: this.participants.has(p.id),
+        purse: p.purse,
+        power: p.power.map((x) => x.id),
+        done: p.done,
+        underdog: this.isUnderdog(p),
       })),
+      powerups: this.cfg.PITSTOP_MS > 0 ? powerups.catalogue() : [],
+      maxPowerSlots: powerups.MAX_SLOTS,
       intro: this.phase === 'lobby' || this.phase === 'final' ? null : this.intro,
       arena: this.phase === 'lobby' || this.phase === 'final' ? null : this.arena,
       results: this.phase === 'results' ? this.results : null,

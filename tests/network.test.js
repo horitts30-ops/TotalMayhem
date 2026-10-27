@@ -16,6 +16,7 @@ async function startServer(config = {}, gameOptions = {}) {
     config: {
       INTRO_MS: 150,
       RESULTS_MS: 250,
+      PITSTOP_MS: 120, // keep the power-up shop short in tests (it has its own tests)
       ROUND_END_DELAY_MS: 100,
       // Pin the schedule so these tests always play Crumble Floor (the match
       // schedule itself is random and has its own tests).
@@ -143,18 +144,18 @@ test('names are cleaned and cosmetics are range-checked', async () => {
     assert.ok(me.name.length <= 14);
     assert.ok(!/[<>\u0000-\u001f]/.test(me.name));
     assert.ok(me.color >= 0 && me.color <= 11);
-    assert.ok(me.hat >= 0 && me.hat <= 15);
-    assert.ok(Number.isInteger(me.skin) && me.skin >= 0 && me.skin <= 7);
+    assert.ok(me.hat >= 0 && me.hat <= 21);
+    assert.ok(Number.isInteger(me.skin) && me.skin >= 0 && me.skin <= 11);
 
     // Valid choices go through, junk is ignored or clamped.
-    a.emit('room:customize', { color: 11, hat: 15, skin: 3 });
-    await until(() => a.state.players[0].hat === 15, 2000, 'cosmetics change');
+    a.emit('room:customize', { color: 11, hat: 21, skin: 3 });
+    await until(() => a.state.players[0].hat === 21, 2000, 'cosmetics change');
     assert.equal(a.state.players[0].color, 11);
     assert.equal(a.state.players[0].skin, 3);
     a.emit('room:customize', { color: 'red', hat: {}, skin: [1, 2] });
     await sleep(100);
-    assert.ok(a.state.players[0].skin >= 0 && a.state.players[0].skin <= 7);
-    assert.ok(a.state.players[0].hat >= 0 && a.state.players[0].hat <= 15);
+    assert.ok(a.state.players[0].skin >= 0 && a.state.players[0].skin <= 11);
+    assert.ok(a.state.players[0].hat >= 0 && a.state.players[0].hat <= 21);
 
     const blank = await mk();
     const r2 = await ask(blank, 'room:create', { name: '   ' });
@@ -632,5 +633,55 @@ test('Prop Hunt over the network: the seeker is never sent where the disguised h
         if (listed) assert.ok(!listed.dg, 'no disguise flag for others');
       }
     }
+  });
+});
+
+test('power-ups over the network: the server keeps the purse, rejects cheats, and the boost reaches the next round', async () => {
+  await withServer({ PITSTOP_MS: 20000 }, { timeScale: 25 }, async ({ mk }) => {
+    const host = await mk();
+    const guest = await mk();
+    const created = await ask(host, 'room:create', { name: 'Host' });
+    const joined = await ask(guest, 'room:join', { code: created.code, name: 'Guest' });
+    await ask(host, 'room:rounds', 3);
+    await until(() => host.state.players.length === 2, 2000, 'both joined');
+
+    // Buying is refused outside the pit stop, and a modified browser cannot add coins.
+    assert.equal((await ask(host, 'shop:buy', 'speed')).ok, false);
+    host.emit('shop:purse', { purse: 9999 });
+    host.emit('shop:buy', { id: 'speed', price: 0 }); // wrong shape on purpose
+
+    assert.equal((await ask(host, 'match:start', null)).ok, true);
+    await until(() => host.state.phase === 'pitstop', 20000, 'pit stop after round 1');
+    assert.ok(host.state.powerups.length >= 5, 'the catalogue is sent to the browser');
+    assert.equal(host.state.maxPowerSlots, 2);
+
+    const mine = (sock, id) => sock.state.players.find((p) => p.id === id);
+    const hostPurse = mine(host, created.playerId).purse;
+    const guestPurse = mine(guest, joined.playerId).purse;
+    assert.ok(hostPurse >= 10 && hostPurse < 100, `purse comes from earned coins (${hostPurse})`);
+    assert.ok(Math.max(hostPurse, guestPurse) >= 20);
+
+    // Whoever can afford it buys; the other one is told they are too poor.
+    const [rich, poor, richId, poorId] = hostPurse >= guestPurse ? [host, guest, created.playerId, joined.playerId] : [guest, host, joined.playerId, created.playerId];
+    assert.equal((await ask(rich, 'shop:buy', 'speed')).ok, true);
+    assert.equal((await ask(rich, 'shop:buy', 'speed')).ok, false, 'no duplicates');
+    assert.equal((await ask(rich, 'shop:buy', 'free-money')).ok, false);
+    await until(() => mine(poor, richId).power.length === 1, 2000, 'everybody sees the loadout');
+    assert.deepEqual(mine(poor, richId).power, ['speed']);
+    assert.equal(mine(rich, richId).purse, Math.max(hostPurse, guestPurse) - 20);
+    if (mine(poor, poorId).purse < 20) {
+      const answer = await ask(poor, 'shop:buy', 'jump');
+      assert.equal(answer.ok, false);
+      assert.match(answer.error, /more coins/);
+    }
+
+    // Both say they are ready: the pit stop ends early and round 2 begins.
+    host.emit('shop:done', true);
+    guest.emit('shop:done', true);
+    await until(() => host.state.phase === 'intro' && host.state.round === 2, 3000, 'round 2 intro');
+    assert.deepEqual(mine(host, richId).power, ['speed'], 'the intro shows what you carry');
+    await until(() => host.state.phase === 'playing', 5000, 'round 2 playing');
+    await until(() => host.state.phase === 'results' || host.state.phase === 'pitstop', 20000, 'round 2 over');
+    await until(() => mine(host, richId).power.length === 0, 3000, 'power-up used up after one round');
   });
 });

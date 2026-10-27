@@ -149,6 +149,26 @@ function createGameServer(options = {}) {
       });
     });
 
+    // Pit stop (power-up shop between rounds). The server owns the purse.
+    on('shop:buy', (id, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.buyPowerup(player.id, typeof id === 'string' ? id : '');
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('shop:refund', (id, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.refundPowerup(player.id, typeof id === 'string' ? id : '');
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('shop:done', (data) => {
+      const { room, player } = lookup();
+      if (room) room.setShopDone(player.id, data !== false);
+    });
+
     on('room:ready', (data) => {
       const { room, player } = lookup();
       if (room) room.setReady(player.id, data === true || (data && data.ready === true));

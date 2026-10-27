@@ -61,13 +61,13 @@ test('shop: a fresh wallet owns exactly the free items and has no coins', async 
   assert.ok(shop.owns(w, 'skin', 0), 'Plain is free');
 });
 
-test('shop: prices line up with the catalogue sizes and are never negative', async () => {
+test('shop: prices line up with the catalogue sizes; only -1 ("unlock only") is ever negative', async () => {
   const shop = await loadShop();
   const cfg = require('../server/config');
   assert.equal(shop.countOf('hat'), cfg.HAT_COUNT);
   assert.equal(shop.countOf('skin'), cfg.SKIN_COUNT);
   assert.equal(shop.countOf('color'), cfg.COLOR_COUNT);
-  for (const k of shop.KINDS) for (const it of shop.catalogue(k)) assert.ok(Number.isInteger(it.price) && it.price >= 0);
+  for (const k of shop.KINDS) for (const it of shop.catalogue(k)) assert.ok(Number.isInteger(it.price) && (it.price >= 0 || it.price === shop.UNLOCK_ONLY));
 });
 
 test('shop: buying takes the exact price, adds the item and refuses when too poor', async () => {
@@ -173,4 +173,37 @@ test('shop: a normal match earns enough that the cheap items are a short grind',
   assert.ok(total <= 80, `but not for the whole shop (earned ${total})`);
   const priciest = Math.max(...shop.KINDS.flatMap((k) => shop.catalogue(k).map((i) => i.price)));
   assert.ok(priciest / total >= 2, 'the best items take a few matches');
+});
+
+test('shop: unlock-only items cannot be bought with any number of coins, but can be granted', async () => {
+  const shop = await loadShop();
+  const w = shop.emptyWallet();
+  shop.credit(w, 99999, 'rich');
+  const unlockOnly = [];
+  for (const k of shop.KINDS) for (const it of shop.catalogue(k)) if (it.price === shop.UNLOCK_ONLY) unlockOnly.push(it);
+  assert.equal(unlockOnly.length, 10, '6 hats + 4 skins are earned, not bought');
+  for (const it of unlockOnly) {
+    assert.equal(shop.owns(w, it.kind, it.index), false, `${it.name} is not owned by default`);
+    const res = shop.buy(w, it.kind, it.index);
+    assert.equal(res.ok, false);
+    assert.match(res.error, /achievement/i);
+  }
+  assert.equal(w.coins, 99999, 'a refused purchase costs nothing');
+  const first = unlockOnly[0];
+  assert.equal(shop.grant(w, first.kind, first.index), true);
+  assert.equal(shop.owns(w, first.kind, first.index), true);
+  assert.equal(shop.grant(w, first.kind, first.index), false, 'granting twice changes nothing');
+  assert.equal(shop.grant(w, 'hat', 999), false);
+  assert.equal(shop.grant(w, 'cape', 1), false);
+  assert.equal(w.coins, 99999);
+});
+
+test('shop: a saved look that wears a locked achievement item falls back to something owned', async () => {
+  const shop = await loadShop();
+  const w = shop.emptyWallet();
+  const look = shop.sanitizeLook(w, { name: 'X', color: 0, hat: 16, skin: 11 });
+  assert.equal(look.hat, 0);
+  assert.equal(look.skin, 0);
+  shop.grant(w, 'hat', 16);
+  assert.equal(shop.sanitizeLook(w, { name: 'X', color: 0, hat: 16, skin: 0 }).hat, 16);
 });

@@ -24,6 +24,7 @@ module.exports = {
   ALLOWED_ROUNDS: [1, 3, 5],
   INTRO_MS: 7000, // "how to play" card before each round
   RESULTS_MS: 9000, // funny results screen after each round
+  PITSTOP_MS: 15000, // the power-up shop between rounds (0 turns power-ups off)
   ROUND_END_DELAY_MS: 1800, // pause after the last fall so everyone can see it
 
   // Disconnects
@@ -36,6 +37,6 @@ module.exports = {
   // Cosmetic choices that exist (the client draws them; the server only
   // checks that the numbers are in range).
   COLOR_COUNT: 12,
-  HAT_COUNT: 16,
-  SKIN_COUNT: 8,
+  HAT_COUNT: 22, // 16 normal + 6 you can only unlock with achievements
+  SKIN_COUNT: 12, // 8 normal + 4 achievement skins
 };

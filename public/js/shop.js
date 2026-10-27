@@ -16,9 +16,13 @@ import { COLORS, HATS, SKINS } from './constants.js';
 export const WALLET_KEY = 'tm_wallet';
 
 // price 0 = everybody starts with it.
+// price -1 (UNLOCK_ONLY) = cannot be bought at all; you earn it with an
+// achievement (see achievements.js), so coins never buy the special ones.
 // Edit the numbers freely. A normal 3-round match with friends earns roughly 50-60 coins.
-const HAT_PRICES = [0, 0, 150, 40, 0, 40, 40, 80, 100, 80, 100, 40, 120, 0, 40, 100];
-const SKIN_PRICES = [0, 0, 40, 60, 60, 60, 80, 200];
+export const UNLOCK_ONLY = -1;
+const U = UNLOCK_ONLY;
+const HAT_PRICES = [0, 0, 150, 40, 0, 40, 40, 80, 100, 80, 100, 40, 120, 0, 40, 100, U, U, U, U, U, U];
+const SKIN_PRICES = [0, 0, 40, 60, 60, 60, 80, 200, U, U, U, U];
 const COLOR_PRICES = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 50];
 
 export const KINDS = ['hat', 'skin', 'color'];
@@ -35,6 +39,9 @@ export function nameOf(kind, index) {
 }
 export function priceOf(kind, index) {
   return PRICES[kind][index] || 0;
+}
+export function isUnlockOnly(kind, index) {
+  return priceOf(kind, index) === UNLOCK_ONLY;
 }
 
 // Every item as a flat list (handy for tests and the shop grid).
@@ -99,12 +106,22 @@ export function credit(wallet, amount, key) {
   return n;
 }
 
+// Gives an item for free (achievement rewards). Returns true if it is new.
+export function grant(wallet, kind, index) {
+  if (!KINDS.includes(kind) || !Number.isInteger(index) || index < 0 || index >= countOf(kind)) return false;
+  if (owns(wallet, kind, index)) return false;
+  wallet.owned[kind].push(index);
+  wallet.owned[kind].sort((a, b) => a - b);
+  return true;
+}
+
 // Returns { ok:true } or { ok:false, error }.
 export function buy(wallet, kind, index) {
   if (!KINDS.includes(kind) || !Number.isInteger(index) || index < 0 || index >= countOf(kind)) {
     return { ok: false, error: 'No such item.' };
   }
   if (owns(wallet, kind, index)) return { ok: false, error: 'You already own that.' };
+  if (isUnlockOnly(kind, index)) return { ok: false, error: 'Coins cannot buy this one. Unlock it with an achievement!' };
   const price = priceOf(kind, index);
   if (wallet.coins < price) return { ok: false, error: `You need ${price - wallet.coins} more coins.` };
   wallet.coins -= price;

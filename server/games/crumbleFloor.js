@@ -21,6 +21,7 @@
 // ===========================================================================
 
 const { safeNumber } = require('../util');
+const { normalizeMods } = require('../powerups');
 
 // ----- Arena ---------------------------------------------------------------
 const TILE = 64;
@@ -234,6 +235,7 @@ class CrumbleFloor {
         fx: n === 1 ? 1 : dx / d,
         fy: n === 1 ? 0 : dy / d,
         input: { mx: 0, my: 0, jump: false, shove: false },
+        mods: normalizeMods(options.mods && options.mods[info.id]), // power-ups bought in the pit stop
         jumpBuf: 0,
         shoveBuf: 0,
         coyote: 0,
@@ -432,7 +434,7 @@ class CrumbleFloor {
     }
 
     const grounded = p.z <= 0 && p.vz <= 0;
-    const speed = TUNING.speed * (p.slow > 0 ? TUNING.slowFactor : 1);
+    const speed = TUNING.speed * (p.slow > 0 ? TUNING.slowFactor : 1) * p.mods.speed;
     const accel = grounded ? TUNING.groundAccel * this.v.grip : TUNING.airAccel;
     if (!stunned) {
       const k = Math.min(1, accel * dt);
@@ -446,7 +448,7 @@ class CrumbleFloor {
 
     if (p.jumpBuf > 0) {
       if (grounded || p.coyote > 0) {
-        p.vz = TUNING.jumpSpeed * (this.v.jump || 1);
+        p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
         p.z = 0.01;
         p.coyote = 0;
         p.jumpBuf = 0;
@@ -491,7 +493,7 @@ class CrumbleFloor {
   }
 
   _doShove(p) {
-    p.shoveCd = TUNING.shoveCooldown;
+    p.shoveCd = TUNING.shoveCooldown * p.mods.shoveCd;
     p.shoveAnim = 0.28;
     p.shoves++;
     let hits = 0;
@@ -500,7 +502,7 @@ class CrumbleFloor {
       const dx = q.x - p.x;
       const dy = q.y - p.y;
       const d = Math.hypot(dx, dy);
-      if (d > TUNING.shoveRange) continue;
+      if (d > TUNING.shoveRange * p.mods.range) continue;
       if (d > 1) {
         const dot = (dx * p.fx + dy * p.fy) / d;
         if (dot < TUNING.shoveConeDot) continue;
@@ -511,8 +513,8 @@ class CrumbleFloor {
       const kl = Math.hypot(kx, ky) || 1;
       kx /= kl;
       ky /= kl;
-      q.kx = kx * TUNING.shoveSpeed;
-      q.ky = ky * TUNING.shoveSpeed;
+      q.kx = kx * TUNING.shoveSpeed * q.mods.sturdy;
+      q.ky = ky * TUNING.shoveSpeed * q.mods.sturdy;
       q.stun = TUNING.stunTime;
       q.immune = TUNING.shoveImmune;
       q.lastShovedBy = p.id;

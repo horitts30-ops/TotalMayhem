@@ -401,3 +401,98 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
 }
 .earn small { font-weight: 800; opacity: 0.7; margin-left: 6px; }
 .final-panel .rows { gap: 5px; }
+
+/* ---------------------------------------------------------------- pit stop */
+.coin.blue { background: radial-gradient(circle at 35% 30%, #e3f6ff 0%, #5ec8ff 45%, #1982c4 100%); }
+.earn.blue { color: #0b4f7c; background: #def2ff; }
+.intro-power { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; margin: 0 0 12px; font-weight: 900; }
+.intro-power span { background: #def2ff; border: 3.5px solid var(--ink); border-radius: 14px; padding: 3px 12px; }
+
+.pit-panel { width: 820px; max-height: 690px; }
+.pit-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pit-head .panel-head { margin: 0; }
+.pit-purse {
+  display: inline-flex; align-items: center; gap: 6px; background: #def2ff; border: 4px solid var(--ink);
+  border-radius: 16px; padding: 2px 16px; font-weight: 900; font-size: 1.5rem; box-shadow: 0 4px 0 var(--ink);
+}
+.pit-purse.bump { animation: bump 0.5s ease; }
+.pit-note { text-align: center; font-weight: 800; margin: 8px 0 10px; opacity: 0.8; }
+.pit-note b { color: #1b9c4a; }
+.pit-offers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.pit-card {
+  font: inherit; color: var(--ink); background: #fff; border: 4px solid var(--ink); border-radius: 18px;
+  padding: 8px 6px 8px; cursor: pointer; text-align: center; box-shadow: 0 4px 0 var(--ink);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.pit-card:hover:not(:disabled) { transform: translateY(-2px); }
+.pit-card .ic { font-size: 2.2rem; line-height: 1.1; }
+.pit-card .nm { font-weight: 900; font-size: 0.95rem; line-height: 1.05; }
+.pit-card .ds { font-weight: 800; font-size: 0.78rem; opacity: 0.75; min-height: 3.1em; }
+.pit-card .pr { font-weight: 900; font-size: 1.05rem; background: #def2ff; border: 3px solid var(--ink); border-radius: 12px; padding: 1px 10px; }
+.pit-card .pr s { opacity: 0.5; font-weight: 800; margin-right: 4px; }
+.pit-card.have { background: #d6ffe3; }
+.pit-card.have .pr { background: #fff; }
+.pit-card.cant { cursor: not-allowed; opacity: 0.55; }
+.pit-others { display: flex; flex-wrap: wrap; gap: 6px 8px; justify-content: center; margin-top: 10px; min-height: 30px; }
+.pit-others .chip { font-size: 0.85rem; }
+.pit-others .chip.ready { background: #d6ffe3; }
+.pit-foot { display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 10px; }
+.pit-foot .btn.big.waiting { background: #fff; }
+.pit-count { font-weight: 900; font-size: 1.3rem; color: var(--purple); min-width: 120px; }
+.pit-card .pr.got { background: #fff; }
+.pit-card.have::after { content: "tap to undo"; font-size: 0.7rem; font-weight: 800; opacity: 0.55; }
+
+/* ----------------------------------------------- no black bars around the game */
+#stage-wrap.solid-bg { background: radial-gradient(circle at 50% 40%, #6a3de8, #2a1a6c 80%); }
+#stage-wrap.solid-bg #game-canvas { visibility: hidden; }
+#stage-wrap.solid-bg .overlay.solid { background: none; }
+
+/* ------------------------------------------------------------- achievements */
+.trophy-btn { white-space: nowrap; }
+.trophy-btn .trophy-count { margin-left: 2px; opacity: 0.7; }
+.trophy-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px;
+  max-height: 440px; overflow-y: auto; padding: 4px 4px 8px;
+}
+.trophy-card {
+  position: relative; display: grid; grid-template-columns: 46px 1fr auto; gap: 2px 10px; align-items: center;
+  background: #fff; border: 3.5px solid var(--ink); border-radius: 16px; padding: 8px 10px; box-shadow: 0 3px 0 var(--ink);
+}
+.trophy-card .ic { font-size: 2rem; text-align: center; grid-column: 1; grid-row: 1 / span 3; filter: grayscale(1) opacity(0.45); }
+.trophy-card .nm, .trophy-card .ds, .trophy-card .pg, .trophy-card .pw { grid-column: 2; }
+.trophy-card .pg { white-space: nowrap; }
+.trophy-card .nm { font-weight: 900; font-size: 1rem; line-height: 1.1; }
+.trophy-card .ds { font-weight: 800; font-size: 0.78rem; opacity: 0.72; line-height: 1.15; }
+.trophy-card .bar { height: 10px; border: 2.5px solid var(--ink); border-radius: 6px; background: #eee; overflow: hidden; margin-top: 2px; }
+.trophy-card .bar i { display: block; height: 100%; background: var(--blue); }
+.trophy-card .pg { font-weight: 900; font-size: 0.72rem; opacity: 0.6; }
+.trophy-card .rw { grid-column: 3; grid-row: 1 / span 3; display: flex; flex-direction: column; align-items: center; gap: 0; font-weight: 900; font-size: 0.66rem; text-align: center; max-width: 66px; line-height: 1.05; }
+.trophy-card .rw canvas { width: 48px; height: 60px; }
+.trophy-card.done { background: #fff6c9; }
+.trophy-card.done .ic { filter: none; }
+.trophy-card.done .bar i { background: #1b9c4a; }
+.trophy-card:not(.done) .rw canvas { filter: grayscale(0.7) brightness(0.9); }
+
+.unlocks { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.unlock-toast {
+  display: flex; align-items: center; gap: 12px; background: #fff6c9; border: 4px solid var(--ink); border-radius: 20px;
+  padding: 8px 18px 8px 12px; box-shadow: 0 5px 0 var(--ink), 0 14px 30px rgba(0, 0, 0, 0.3); animation: unlockIn 0.45s cubic-bezier(.2, 1.5, .4, 1);
+  max-width: min(92vw, 460px);
+}
+.unlock-toast.out { opacity: 0; transform: translateY(-12px); transition: all 0.4s; }
+.unlock-toast .ic { font-size: 2.1rem; }
+.unlock-toast .tt { font-weight: 900; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: #8a5a00; }
+.unlock-toast .nm { font-weight: 900; font-size: 1.15rem; line-height: 1.1; }
+.unlock-toast .rd { font-weight: 800; font-size: 0.85rem; color: #1b7a3c; }
+@keyframes unlockIn { from { transform: translateY(-40px) scale(0.8); opacity: 0; } }
+.shop-card .tag.ach::before { content: "\1F3C6 "; }
+.shop-card.locked .tag.ach::before { content: "\1F3C6 "; }
+.shop-hint { margin-top: 4px; font-weight: 800; font-size: 0.85rem; text-align: center; max-width: 210px; line-height: 1.2; }
+
+/* ------------------------------------------------------------------- music */
+.mute.music { bottom: 64px; font-size: 1.2rem; }
+.mute.music.off { opacity: 0.6; }
+.mute.music.off::after {
+  content: ""; position: absolute; left: 9px; right: 9px; top: 50%; height: 4px; background: var(--ink);
+  border-radius: 2px; transform: rotate(-35deg);
+}

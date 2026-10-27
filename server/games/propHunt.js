@@ -232,11 +232,11 @@ class PropHunt extends ArenaGame {
   }
 
   _smack(p) {
-    p.shoveCd = this.cfg.smackCooldown;
+    p.shoveCd = this.cfg.smackCooldown * p.mods.shoveCd; // (Quick Hands and Long Arms help the seeker too)
     p.shoveAnim = 0.28;
     p.shoves++;
     let target = null;
-    let targetD = this.cfg.smackRange;
+    let targetD = this.cfg.smackRange * p.mods.range;
     const consider = (kind, ref, x, y) => {
       const dx = x - p.x;
       const dy = y - p.y;

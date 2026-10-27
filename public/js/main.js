@@ -14,11 +14,16 @@ import { socket, request, saveSession, loadSession, clearSession } from './net.j
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
-import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS } from './constants.js';
+import { music, sceneFor } from './music.js';
+import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, THEMES } from './constants.js';
 import {
   KINDS, KIND_LABEL, loadWallet, saveWallet, owns, credit, buy, nextOwned, sanitizeLook,
-  catalogue, nameOf as itemName, priceOf,
+  catalogue, nameOf as itemName, priceOf, isUnlockOnly,
 } from './shop.js';
+import {
+  ACHIEVEMENTS, loadTrophies, saveTrophies, emptyTrophies, recordRound, recordFinal, recordPowerRound, recordCoins,
+  recordOwned, applyRewards, achievementFor, progressOf, unlockedCount,
+} from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
 const INTERP_MS = 100; // other players are drawn this far in the past, for smoothness
@@ -32,6 +37,7 @@ const S = {
   snaps: [], // recent world snapshots: { r: receivedAtMs, s: snapshot }
   meta: new Map(), // player id -> { name, color, hat, skin }
   wallet: loadWalletSafe(),
+  trophies: loadTrophiesSafe(), // achievements (see achievements.js)
   look: null, // filled in right below (it needs the wallet)
   theme: 'sunny',
   avatars: [], // little canvases that animate (menus, results)
@@ -58,6 +64,14 @@ function saveWalletNow() {
   const st = storage();
   if (st) saveWallet(st, S.wallet);
 }
+function loadTrophiesSafe() {
+  const st = storage();
+  return st ? loadTrophies(st) : emptyTrophies();
+}
+function saveTrophiesNow() {
+  const st = storage();
+  if (st) saveTrophies(st, S.trophies);
+}
 
 function loadLook() {
   let saved = {};
@@ -83,6 +97,15 @@ function saveLook() {
     /* ignore */
   }
 }
+
+// Achievement rewards are re-granted on every start (it is safe to repeat), so a
+// wiped or older wallet can never lose a hat you earned. This runs BEFORE the
+// saved look is loaded, so a worn reward hat is still allowed.
+applyRewards(S.trophies, S.wallet);
+recordOwned(S.trophies, S.wallet);
+applyRewards(S.trophies, S.wallet);
+saveWalletNow();
+saveTrophiesNow();
 
 S.look = loadLook();
 
@@ -123,6 +146,7 @@ function animateAvatars(tSec) {
 
 function showView(v) {
   S.view = v;
+  if (v === 'title') music.setScene(sceneFor({ phase: 'title' }));
   $('screen-title').classList.toggle('hidden', v !== 'title');
   $('screen-lobby').classList.toggle('hidden', v !== 'lobby');
   $('stage-wrap').classList.toggle('hidden', v !== 'stage');
@@ -132,12 +156,39 @@ function showView(v) {
 function fitStage() {
   const k = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
   const stage = $('stage');
+  const left = (window.innerWidth - STAGE_W * k) / 2;
+  const top = (window.innerHeight - STAGE_H * k) / 2;
   stage.style.transform = `scale(${k})`;
-  stage.style.left = `${(window.innerWidth - STAGE_W * k) / 2}px`;
-  stage.style.top = `${(window.innerHeight - STAGE_H * k) / 2}px`;
+  stage.style.left = `${left}px`;
+  stage.style.top = `${top}px`;
+  S.fit = { top, bottom: top + STAGE_H * k };
+  S.bgSig = ''; // the window shape changed, so repaint the edges
   renderer.resize(k);
 }
 window.addEventListener('resize', fitStage);
+
+// The game is a fixed 1024x720 picture scaled to fit the window. Instead of
+// leaving black bars where it does not reach, the page behind it is painted
+// with the same colours, so the picture just seems to continue to the edges.
+function syncStageBg(themeKey) {
+  const ph = S.room ? S.room.phase : '';
+  const solid = ph === 'intro' || ph === 'pitstop' || ph === 'final';
+  const dim = ph === 'results';
+  const sig = `${themeKey}|${solid ? 's' : dim ? 'd' : 'n'}`;
+  if (sig === S.bgSig || !S.fit) return;
+  S.bgSig = sig;
+  const wrap = $('stage-wrap');
+  // The purple intro / pit stop / final screens are painted on the whole window
+  // (see .solid-bg in style.css) so they have no edges either.
+  wrap.classList.toggle('solid-bg', solid);
+  if (solid) {
+    wrap.style.background = '';
+    return;
+  }
+  const t = THEMES[themeKey] || THEMES.sunny;
+  const grad = `linear-gradient(180deg, ${t.bg[0]} ${S.fit.top}px, ${t.bg[1]} ${S.fit.bottom}px)`;
+  wrap.style.background = dim ? `linear-gradient(rgba(26,15,46,0.62), rgba(26,15,46,0.62)), ${grad}` : grad;
+}
 
 function iAmHost() {
   return !!(S.room && S.room.hostId === S.me);
@@ -193,6 +244,8 @@ function mountPicker(prefix) {
   $(`${prefix}-skin-next`).addEventListener('click', () => step('skin', 1));
   const shopBtn = $(`${prefix}-shop`);
   if (shopBtn) shopBtn.addEventListener('click', () => openShop());
+  const troBtn = $(`${prefix}-trophies`);
+  if (troBtn) troBtn.addEventListener('click', () => openTrophies());
   pickers.push({ swatchesEl, hatEl: $(`${prefix}-hat-name`), skinEl: $(`${prefix}-skin-name`) });
 }
 
@@ -206,6 +259,7 @@ function refreshPickers() {
     p.skinEl.textContent = SKINS[S.look.skin];
   }
   for (const c of document.querySelectorAll('.coin-count')) c.textContent = String(S.wallet.coins);
+  for (const c of document.querySelectorAll('.trophy-count')) c.textContent = `${unlockedCount(S.trophies)}/${ACHIEVEMENTS.length}`;
 }
 
 function lookChanged() {
@@ -356,6 +410,109 @@ function renderIntro(st) {
   const ctr = $('intro-controls');
   ctr.textContent = '';
   for (const c of g.controls) ctr.appendChild(el('span', null, `${c.label}: ${c.keys}`));
+  const pw = $('intro-power');
+  const mine = (myRoomPlayer() || {}).power || [];
+  pw.textContent = '';
+  pw.classList.toggle('hidden', mine.length === 0);
+  if (mine.length) {
+    pw.appendChild(el('span', null, 'Your power-ups:'));
+    for (const id of mine) {
+      const def = powerDef(st, id);
+      if (def) pw.appendChild(el('span', null, `${def.icon} ${def.name}`));
+    }
+  }
+}
+
+// =============================================================== pit stop
+// Power-ups are bought with the "purse" that the SERVER keeps. The browser only
+// asks (shop:buy / shop:refund / shop:done) and then draws whatever the server
+// says in the next room state.
+function powerDef(st, id) {
+  return (st.powerups || []).find((p) => p.id === id) || null;
+}
+
+function pitMsg(text, good) {
+  const m = $('pit-msg');
+  m.textContent = text || '';
+  m.classList.toggle('good', !!good);
+}
+
+async function pitAction(kind, id) {
+  const res = await request(kind === 'buy' ? 'shop:buy' : 'shop:refund', id);
+  if (res.ok) {
+    sfx.coin();
+    pitMsg('');
+  } else {
+    sfx.lose();
+    pitMsg(res.error || 'That did not work.');
+  }
+}
+
+function renderPitstop(st) {
+  const me = myRoomPlayer();
+  if (!me) return;
+  const purseEl = $('pit-purse');
+  if (purseEl.textContent !== String(me.purse)) {
+    purseEl.textContent = String(me.purse);
+    const chip = purseEl.parentElement;
+    chip.classList.remove('bump');
+    void chip.offsetWidth;
+    chip.classList.add('bump');
+  }
+  const slots = st.maxPowerSlots || 2;
+  const have = new Set(me.power);
+  const full = me.power.length >= slots;
+  const note = $('pit-note');
+  note.textContent = `Power-ups last for the next round only. Carry up to ${slots} (you have ${me.power.length}).`;
+  if (me.underdog) note.appendChild(el('b', null, ' Comeback price: 30% off for you!'));
+
+  const offers = $('pit-offers');
+  offers.textContent = '';
+  for (const def of st.powerups) {
+    const owned = have.has(def.id);
+    const price = me.underdog ? def.underdogPrice : def.price;
+    const cant = !owned && (full || me.purse < price);
+    const b = el('button', 'pit-card' + (owned ? ' have' : '') + (cant ? ' cant' : ''));
+    b.type = 'button';
+    b.appendChild(el('div', 'ic', def.icon));
+    b.appendChild(el('div', 'nm', def.name));
+    b.appendChild(el('div', 'ds', def.desc));
+    const pr = el('div', 'pr');
+    if (owned) {
+      pr.classList.add('got');
+      pr.textContent = 'Got it ✓';
+      b.title = 'Tap to get your coins back';
+    }
+    else {
+      if (me.underdog) pr.appendChild(el('s', null, String(def.price)));
+      pr.appendChild(document.createTextNode(String(price)));
+    }
+    b.appendChild(pr);
+    b.addEventListener('click', () => {
+      if (owned) pitAction('refund', def.id);
+      else if (full) pitMsg(`You can carry ${slots} power-ups. Tap one you own to swap it out.`);
+      else if (me.purse < price) pitMsg(`You need ${price - me.purse} more coins for that.`);
+      else pitAction('buy', def.id);
+    });
+    offers.appendChild(b);
+  }
+
+  const others = $('pit-others');
+  others.textContent = '';
+  for (const p of st.players) {
+    if (!p.connected) continue;
+    const chip = el('div', 'chip' + (p.done ? ' ready' : '') + (p.id === S.me ? ' me' : ''));
+    const dot = el('i');
+    dot.style.background = COLORS[p.color % COLORS.length].hex;
+    chip.appendChild(dot);
+    const icons = p.power.map((id) => (powerDef(st, id) || {}).icon || '').join('');
+    chip.appendChild(document.createTextNode(`${p.name}${p.done ? ' ✓' : ''} ${icons}`));
+    others.appendChild(chip);
+  }
+
+  const btn = $('pit-done');
+  btn.textContent = me.done ? 'Ready ✓ (tap to shop more)' : "I'm ready";
+  btn.classList.toggle('waiting', !!me.done);
 }
 
 function placeLabel(n) {
@@ -449,7 +606,124 @@ function creditFromState(st) {
     saveWalletNow();
     refreshPickers();
     sfx.coin();
+    afterUnlocks(recordCoins(S.trophies, gained));
   }
+}
+
+// =============================================================== achievements
+// Called with whatever a record*() function just unlocked. Hands out the special
+// hats/skins, saves, and shows the pop-ups.
+function afterUnlocks(fresh) {
+  const rewards = applyRewards(S.trophies, S.wallet);
+  const more = rewards.length ? recordOwned(S.trophies, S.wallet) : [];
+  const all = [...fresh, ...more];
+  saveTrophiesNow();
+  if (rewards.length || all.length) {
+    saveWalletNow();
+    refreshPickers();
+    if (SHOP.open) renderShop();
+    if (TRO.open) renderTrophies();
+  }
+  for (const a of all) showUnlock(a);
+}
+
+function showUnlock(a) {
+  const box = $('unlocks');
+  const t = el('div', 'unlock-toast');
+  t.appendChild(el('div', 'ic', a.icon));
+  const txt = el('div');
+  txt.appendChild(el('div', 'tt', 'Achievement unlocked!'));
+  txt.appendChild(el('div', 'nm', a.name));
+  if (a.reward) txt.appendChild(el('div', 'rd', `New ${a.reward.kind}: ${itemName(a.reward.kind, a.reward.index)}!`));
+  t.appendChild(txt);
+  box.appendChild(t);
+  while (box.children.length > 4) box.firstChild.remove();
+  sfx.jackpot();
+  setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 450);
+  }, a.reward ? 6500 : 4500);
+}
+
+// Counts this round / match / pit stop for the trophy case (each is counted once).
+function trackAchievements(st) {
+  if (!S.me) return;
+  let fresh = [];
+  if (st.phase === 'results' && st.results) {
+    const row = st.results.rows.find((r) => r.id === S.me);
+    fresh = recordRound(S.trophies, st.results, row);
+  } else if (st.phase === 'final' && st.final) {
+    const e = st.final.standings.find((x) => x.id === S.me);
+    if (e) fresh = recordFinal(S.trophies, st.final, e.place);
+  } else if (st.phase === 'intro') {
+    const me = myRoomPlayer();
+    if (me) fresh = recordPowerRound(S.trophies, st.matchId, st.round, me.power.length);
+  } else {
+    return;
+  }
+  afterUnlocks(fresh);
+}
+
+const TRO = { open: false };
+
+function openTrophies() {
+  TRO.open = true;
+  $('overlay-trophies').classList.remove('hidden');
+  renderTrophies();
+  sfx.click();
+}
+
+function closeTrophies() {
+  TRO.open = false;
+  $('overlay-trophies').classList.add('hidden');
+}
+
+function renderTrophies() {
+  $('trophy-total').textContent = `${unlockedCount(S.trophies)}/${ACHIEVEMENTS.length}`;
+  const grid = $('trophy-grid');
+  grid.textContent = '';
+  for (const a of ACHIEVEMENTS) {
+    const pr = progressOf(S.trophies, a);
+    const card = el('div', 'trophy-card' + (pr.done ? ' done' : ''));
+    card.appendChild(el('div', 'ic', a.icon));
+    card.appendChild(el('div', 'nm', a.name));
+    card.appendChild(el('div', 'ds', a.desc));
+    if (pr.done) card.appendChild(el('div', 'pg', 'Unlocked \u2713'));
+    else if (a.goal === 1) card.appendChild(el('div', 'pg', 'Not yet'));
+    else {
+      const wrap = el('div', 'pw');
+      const bar = el('div', 'bar');
+      const fill = el('i');
+      fill.style.width = `${Math.round((pr.value / pr.goal) * 100)}%`;
+      bar.appendChild(fill);
+      wrap.appendChild(bar);
+      wrap.appendChild(el('div', 'pg', `${pr.value} / ${pr.goal}`));
+      card.appendChild(wrap);
+    }
+    if (a.reward) {
+      const rw = el('div', 'rw');
+      const cv = el('canvas');
+      cv.width = 64;
+      cv.height = 80;
+      rw.appendChild(cv);
+      drawPreview(cv, { ...S.look, [a.reward.kind]: a.reward.index }, 0);
+      rw.appendChild(document.createTextNode(itemName(a.reward.kind, a.reward.index)));
+      card.appendChild(rw);
+    }
+    grid.appendChild(card);
+  }
+}
+
+function showPurseNote(st) {
+  const box = $('results-purse');
+  const me = myRoomPlayer();
+  const show = st.phase === 'results' && me && st.powerups && st.powerups.length > 0 && st.round < st.rounds;
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  box.textContent = '';
+  box.appendChild(el('span', 'coin blue'));
+  box.appendChild(document.createTextNode(` Pit-stop purse: ${me.purse}`));
+  box.appendChild(el('small', null, '(power-ups for the next round, this match only)'));
 }
 
 function showEarned(id, total, parts) {
@@ -528,7 +802,9 @@ function renderShop() {
       drawPreview(cv, { ...S.look, [item.kind]: item.index }, 0);
     }
     card.appendChild(el('div', 'nm', item.name));
-    card.appendChild(el('div', 'tag', owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : String(item.price)));
+    const lockedByAch = !owned && isUnlockOnly(item.kind, item.index);
+    const tag = el('div', 'tag' + (lockedByAch ? ' ach' : ''), owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : lockedByAch ? 'Trophy' : String(item.price));
+    card.appendChild(tag);
     card.addEventListener('click', () => {
       SHOP.sel[item.kind] = item.index;
       $('shop-msg').textContent = '';
@@ -552,6 +828,17 @@ function renderShop() {
   } else if (owned) {
     act.textContent = 'Wear it';
     act.disabled = false;
+  } else if (isUnlockOnly(kind, idx)) {
+    const a = achievementFor(kind, idx);
+    act.textContent = '\u{1F3C6} Unlock with a trophy';
+    act.disabled = true;
+    act.classList.add('need');
+    if (a) {
+      const hint = el('div', 'shop-hint');
+      hint.appendChild(el('b', null, `${a.icon} ${a.name}: `));
+      hint.appendChild(document.createTextNode(a.desc));
+      $('shop-item').appendChild(hint);
+    }
   } else if (S.wallet.coins >= price) {
     act.textContent = `Buy for ${price} coins`;
     act.disabled = false;
@@ -576,6 +863,7 @@ function shopAction() {
     }
     saveWalletNow();
     sfx.jackpot();
+    afterUnlocks(recordOwned(S.trophies, S.wallet));
     msg.textContent = 'Bought! Now wearing it.';
     msg.classList.add('good');
     const chip = document.querySelector('.wallet-chip');
@@ -606,14 +894,22 @@ function applyRoomState(st) {
 
   if (st.phase === 'lobby') renderLobby(st);
   $('overlay-intro').classList.toggle('hidden', st.phase !== 'intro');
+  $('overlay-pitstop').classList.toggle('hidden', st.phase !== 'pitstop');
   $('overlay-results').classList.toggle('hidden', st.phase !== 'results');
   $('overlay-final').classList.toggle('hidden', st.phase !== 'final');
   $('hud').classList.toggle('hidden', st.phase !== 'playing' && st.phase !== 'results');
   if (st.phase === 'intro') renderIntro(st);
+  if (st.phase === 'pitstop') renderPitstop(st);
   if (st.phase === 'results') renderResults(st);
   if (st.phase === 'final') renderFinal(st);
   creditFromState(st);
-  if (st.phase !== 'results') $('results-coins').classList.add('hidden');
+  trackAchievements(st);
+  showPurseNote(st);
+  if (st.phase !== 'playing') music.setScene(sceneFor({ phase: st.phase }));
+  if (st.phase !== 'results') {
+    $('results-coins').classList.add('hidden');
+    $('results-purse').classList.add('hidden');
+  }
   if (st.phase !== 'final') $('final-coins').classList.add('hidden');
   if (st.phase !== 'playing') {
     $('overlay-countdown').classList.add('hidden');
@@ -634,6 +930,13 @@ function onPhaseEnter(prev, st) {
       renderer.reset();
       S.snaps = [];
       S.theme = (st.intro && st.intro.theme) || 'sunny';
+      showView('stage');
+      sfx.click();
+      break;
+    case 'pitstop':
+      renderer.reset();
+      S.snaps = [];
+      pitMsg('');
       showView('stage');
       sfx.click();
       break;
@@ -995,6 +1298,8 @@ function updateHud(frame) {
     }
   }
 
+  if (st.phase === 'playing') music.setScene(sceneFor({ phase: 'playing', gid, t }));
+
   // Countdown overlay
   const cd = $('overlay-countdown');
   const txt = $('countdown-text');
@@ -1057,6 +1362,7 @@ function updateTimersText(now) {
   if (!st) return;
   const secs = Math.max(0, Math.ceil((S.phaseEndsAt - now) / 1000));
   if (st.phase === 'intro') $('intro-count').textContent = `Starting in ${secs}…`;
+  if (st.phase === 'pitstop') $('pit-count').textContent = `${secs}s left`;
   if (st.phase === 'results') {
     $('results-foot').textContent = st.round < st.rounds ? `Next round in ${secs}…` : `Final scores in ${secs}…`;
   }
@@ -1068,6 +1374,7 @@ function loop(now) {
 
   if (S.view === 'stage') {
     const frame = sampleFrame(now);
+    syncStageBg((frame && frame.theme) || S.theme);
     if (frame) {
       renderer.draw(frame, dt);
       if (S.room && (S.room.phase === 'playing' || S.room.phase === 'results')) updateHud(frame);
@@ -1094,6 +1401,12 @@ function bindUi() {
   const codeParam = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
   if (codeParam) $('code-input').value = codeParam;
 
+  $('pit-done').addEventListener('click', () => {
+    const me = myRoomPlayer();
+    sfx.click();
+    socket.emit('shop:done', !(me && me.done));
+  });
+
   $('btn-create').addEventListener('click', createRoom);
   $('btn-join').addEventListener('click', joinRoom);
   $('code-input').addEventListener('input', (e) => {
@@ -1109,12 +1422,18 @@ function bindUi() {
   $('shop-close').addEventListener('click', closeShop);
   $('shop-action').addEventListener('click', shopAction);
   $('final-shop').addEventListener('click', () => openShop());
+  $('final-trophies').addEventListener('click', () => openTrophies());
+  $('trophy-close').addEventListener('click', closeTrophies);
+  $('overlay-trophies').addEventListener('pointerdown', (e) => {
+    if (e.target === $('overlay-trophies')) closeTrophies();
+  });
   $('overlay-shop').addEventListener('pointerdown', (e) => {
     if (e.target === $('overlay-shop')) closeShop();
   });
   addAvatar($('shop-canvas'), () => shopLook());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && SHOP.open) closeShop();
+    if (e.key === 'Escape' && TRO.open) closeTrophies();
   });
 
   $('btn-leave').addEventListener('click', leaveRoom);
@@ -1160,11 +1479,25 @@ function bindUi() {
     setMuted(!isMuted());
     syncMute();
   });
+  const musicBtn = $('music-btn');
+  const syncMusic = () => {
+    musicBtn.classList.toggle('off', !music.isEnabled());
+    musicBtn.setAttribute('aria-pressed', String(music.isEnabled()));
+  };
+  syncMusic();
+  musicBtn.addEventListener('click', () => {
+    music.setEnabled(!music.isEnabled());
+    syncMusic();
+  });
   window.addEventListener('keydown', (e) => {
     const tag = e.target && e.target.tagName;
     if (e.code === 'KeyM' && tag !== 'INPUT' && tag !== 'SELECT') {
       setMuted(!isMuted());
       syncMute();
+    }
+    if (e.code === 'KeyN' && tag !== 'INPUT' && tag !== 'SELECT') {
+      music.setEnabled(!music.isEnabled());
+      syncMusic();
     }
   });
   // Browsers only allow sound after the first click/key press.

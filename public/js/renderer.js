@@ -64,7 +64,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // How far each hat sticks up above the head (used to place name tags).
 // Order matches HATS in constants.js.
-const HAT_HEIGHT = [0, 40, 22, 30, 30, 38, 34, 30, 42, 24, 24, 26, 28, 30, 24, 26];
+const HAT_HEIGHT = [0, 40, 22, 30, 30, 38, 34, 30, 42, 24, 24, 26, 28, 30, 24, 26, 24, 34, 28, 32, 28, 44];
 
 // ------------------------------------------------------------------ hats
 function drawHat(ctx, hat, t) {
@@ -431,6 +431,201 @@ function drawHat(ctx, hat, t) {
       ctx.stroke();
       break;
     }
+    case 16: {
+      // laurel wreath (achievement)
+      const leaf = (x, y, rot, col) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.fillStyle = col;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 7.5, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      };
+      for (let i = 0; i < 5; i++) {
+        const th = Math.PI + 0.1 + i * 0.27;
+        const lx = Math.cos(th) * 20;
+        const ly = 9 + Math.sin(th) * 17;
+        const col = i % 2 ? '#3fae49' : '#69d36b';
+        leaf(lx, ly, th + Math.PI / 2 - 0.35, col);
+        leaf(-lx, ly, -(th + Math.PI / 2 - 0.35), col);
+      }
+      ctx.fillStyle = '#ff4d6d';
+      ctx.lineWidth = 2;
+      for (const x of [-3.6, 3.6]) {
+        ctx.beginPath();
+        ctx.arc(x, -9, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      break;
+    }
+    case 17: {
+      // golden trophy (achievement)
+      ctx.fillStyle = '#ffd23f';
+      ctx.lineWidth = 3;
+      for (const sx of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sx * 12, -22);
+        ctx.bezierCurveTo(sx * 24, -24, sx * 24, -10, sx * 9, -11);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(-13, -27);
+      ctx.lineTo(13, -27);
+      ctx.bezierCurveTo(13, -12, 8, -9, 3, -9);
+      ctx.lineTo(3, -4);
+      ctx.lineTo(8, -4);
+      ctx.lineTo(8, 1);
+      ctx.lineTo(-8, 1);
+      ctx.lineTo(-8, -4);
+      ctx.lineTo(-3, -4);
+      ctx.lineTo(-3, -9);
+      ctx.bezierCurveTo(-8, -9, -13, -12, -13, -27);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-7, -23);
+      ctx.quadraticCurveTo(-8, -15, -5, -13);
+      ctx.stroke();
+      ctx.fillStyle = '#ff4d6d';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      starPath(ctx, 0, -19, 4.8, 2.2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 18: {
+      // hard hat (achievement)
+      ctx.fillStyle = '#ffc400';
+      ctx.beginPath();
+      ctx.ellipse(0, -1, 18, 16, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ffe066';
+      ctx.fillRect(-3.5, -16.4, 7, 15);
+      ctx.strokeRect(-3.5, -16.4, 7, 15);
+      ctx.fillStyle = '#f59f00';
+      rr(ctx, -23, -3, 46, 7, 3.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -9, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 19: {
+      // space helmet (achievement): a glass bubble over the head
+      ctx.fillStyle = 'rgba(170,228,255,0.34)';
+      ctx.beginPath();
+      ctx.ellipse(0, 6, 25, 25, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 6, 19, Math.PI * 1.12, Math.PI * 1.38);
+      ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#cfd8e3';
+      rr(ctx, -27, 3, 54, 8, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(16, -13);
+      ctx.lineTo(23, -27);
+      ctx.stroke();
+      ctx.fillStyle = '#ff4d6d';
+      ctx.beginPath();
+      ctx.arc(23, -28, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 20: {
+      // detective cap (achievement)
+      ctx.fillStyle = '#8a6a3f';
+      for (const sx of [-1, 1]) {
+        rr(ctx, sx < 0 ? -26 : 12, -3, 14, 6, 3);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#c29a64';
+      ctx.beginPath();
+      ctx.ellipse(0, -1, 19, 15, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(100,66,28,0.55)';
+      ctx.lineWidth = 2;
+      for (const x of [-12, -4, 4, 12]) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, -18);
+        ctx.stroke();
+      }
+      for (const y of [-5, -11]) {
+        ctx.beginPath();
+        ctx.moveTo(-20, y);
+        ctx.lineTo(20, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0, -1, 19, 15, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = '#8a6a3f';
+      ctx.beginPath();
+      ctx.arc(0, -17, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 21: {
+      // jester hat (achievement)
+      const horn = (d, col) => {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.moveTo(...d[0]);
+        ctx.quadraticCurveTo(...d[1]);
+        ctx.quadraticCurveTo(...d[2]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+      horn([[-18, 1], [-32, -8, -27, -25], [-14, -14, -5, 1]], '#ff4d6d');
+      horn([[18, 1], [32, -8, 27, -25], [14, -14, 5, 1]], '#3a86ff');
+      horn([[-10, 1], [-12, -20, 0, -36], [12, -20, 10, 1]], '#8ac926');
+      ctx.fillStyle = '#ffd23f';
+      rr(ctx, -19, -3, 38, 7, 3.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      for (const [x, y] of [[-27, -26], [27, -26], [0, -37]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      break;
+    }
     default:
       break;
   }
@@ -517,6 +712,74 @@ function drawSkin(ctx, skin, color) {
       });
       ctx.restore();
       break;
+    case 8: // bubbles (achievement)
+      ctx.lineWidth = 1.8;
+      for (const [x, y, r] of [[-14, -42, 7], [12, -45, 5], [-18, -22, 5], [16, -24, 8], [-10, -8, 6], [8, -5, 4], [0, -30, 3.5]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.26)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x - r * 0.35, y - r * 0.38, Math.max(1.1, r * 0.22), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fill();
+      }
+      break;
+    case 9: {
+      // flames (achievement)
+      const tongue = (x, w, h, col) => {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.moveTo(x - w, 4);
+        ctx.quadraticCurveTo(x - w, -h * 0.5, x + w * 0.2, -h);
+        ctx.quadraticCurveTo(x + w, -h * 0.45, x + w, 4);
+        ctx.closePath();
+        ctx.fill();
+      };
+      for (const [x, w, h] of [[-23, 8, 24], [-11, 8, 36], [1, 9, 27], [13, 8, 40], [25, 7, 23]]) tongue(x, w, h, '#ff6b1a');
+      for (const [x, w, h] of [[-23, 4.4, 14], [-11, 4.4, 22], [1, 5, 16], [13, 4.4, 24], [25, 4, 13]]) tongue(x, w, h, '#ffd23f');
+      break;
+    }
+    case 10: {
+      // galaxy (achievement)
+      const g = ctx.createLinearGradient(-30, -54, 30, 2);
+      g.addColorStop(0, 'rgba(28,18,92,0.82)');
+      g.addColorStop(0.5, 'rgba(112,48,172,0.74)');
+      g.addColorStop(1, 'rgba(18,70,142,0.82)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-34, -58, 68, 64);
+      ctx.fillStyle = '#fff';
+      for (const [x, y, r] of [[-17, -44, 1.5], [9, -48, 1.2], [18, -36, 1.6], [-20, -26, 1.2], [-4, -30, 1.1], [14, -18, 1.4], [-12, -10, 1.6], [6, -6, 1.1], [-2, -50, 1]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#ffe9a8';
+      starPath(ctx, -9, -38, 5, 1.8);
+      ctx.fill();
+      starPath(ctx, 15, -14, 4, 1.5);
+      ctx.fill();
+      break;
+    }
+    case 11: {
+      // gold (achievement)
+      const g = ctx.createLinearGradient(-30, -54, 30, 2);
+      g.addColorStop(0, 'rgba(255,243,176,0.9)');
+      g.addColorStop(0.35, 'rgba(255,210,63,0.88)');
+      g.addColorStop(0.7, 'rgba(224,161,0,0.9)');
+      g.addColorStop(1, 'rgba(255,226,122,0.9)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-34, -58, 68, 64);
+      ctx.save();
+      ctx.rotate(-0.6);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(-40, -34, 80, 6);
+      ctx.fillRect(-40, -22, 80, 2.5);
+      ctx.restore();
+      break;
+    }
     default:
       break;
   }

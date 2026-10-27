@@ -27,6 +27,7 @@
 // ===========================================================================
 
 const { safeNumber } = require('../util');
+const { normalizeMods } = require('../powerups');
 
 // ----- Arena (same size and shape as Crumble Floor, so the client can reuse it)
 const TILE = 64;
@@ -144,6 +145,7 @@ class ArenaGame {
         immune: 0,
         stun: 0,
         speedMul: 1,
+        mods: normalizeMods(options.mods && options.mods[info.id]), // power-ups bought in the pit stop
         abandoned: false,
         jumps: 0,
         shoves: 0,
@@ -277,7 +279,7 @@ class ArenaGame {
       p.fy = my / len;
     }
 
-    const speed = TUNING.speed * (this.v.speed || 1) * p.speedMul;
+    const speed = TUNING.speed * (this.v.speed || 1) * p.speedMul * p.mods.speed;
     const accel = grounded ? TUNING.groundAccel * (this.v.grip || 1) : TUNING.airAccel;
     if (!stunned) {
       const k = Math.min(1, accel * dt);
@@ -290,7 +292,7 @@ class ArenaGame {
       if (!this._canJump(p)) {
         p.jumpBuf = 0;
       } else if (grounded) {
-        p.vz = TUNING.jumpSpeed * (this.v.jump || 1);
+        p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
         p.z = 0.01;
         p.jumpBuf = 0;
         p.jumps++;
@@ -344,7 +346,7 @@ class ArenaGame {
   }
 
   _doShove(p) {
-    p.shoveCd = TUNING.shoveCooldown;
+    p.shoveCd = TUNING.shoveCooldown * p.mods.shoveCd;
     p.shoveAnim = 0.28;
     p.shoves++;
     let hits = 0;
@@ -354,7 +356,7 @@ class ArenaGame {
       const dx = q.x - p.x;
       const dy = q.y - p.y;
       const d = Math.hypot(dx, dy);
-      if (d > TUNING.shoveRange) continue;
+      if (d > TUNING.shoveRange * p.mods.range) continue;
       if (d > 1) {
         const dot = (dx * p.fx + dy * p.fy) / d;
         if (dot < TUNING.shoveConeDot) continue;
@@ -363,7 +365,7 @@ class ArenaGame {
       let kx = p.fx * 0.6 + (d > 1 ? dx / d : p.fx) * 0.4;
       let ky = p.fy * 0.6 + (d > 1 ? dy / d : p.fy) * 0.4;
       const kl = Math.hypot(kx, ky) || 1;
-      const power = TUNING.shoveSpeed * (this.v.shoveSpeed || 1);
+      const power = TUNING.shoveSpeed * (this.v.shoveSpeed || 1) * q.mods.sturdy;
       q.kx = (kx / kl) * power;
       q.ky = (ky / kl) * power;
       q.stun = TUNING.stunTime;

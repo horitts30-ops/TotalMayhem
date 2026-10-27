@@ -38,6 +38,12 @@ export function isMuted() {
   return muted;
 }
 
+// For the music player: the audio context and master volume, but only once the
+// browser has really started the sound (after the first click or key press).
+export function getAudio() {
+  return actx && master && actx.state === 'running' ? { ctx: actx, master } : null;
+}
+
 export function setMuted(v) {
   muted = !!v;
   try {

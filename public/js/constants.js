@@ -28,7 +28,9 @@ export const COLORS = [
 // Body patterns ("skins") drawn on top of the colour. Order matches the
 // drawSkin() switch in renderer.js. The server only checks the number is in
 // range (SKIN_COUNT in server/config.js).
-export const SKINS = ['Plain', 'Spots', 'Stripes', 'Hearts', 'Stars', 'Zigzag', 'Checkers', 'Rainbow'];
+export const SKINS = ['Plain', 'Spots', 'Stripes', 'Hearts', 'Stars', 'Zigzag', 'Checkers', 'Rainbow',
+  // Unlock-only (achievements):
+  'Bubbles', 'Flames', 'Galaxy', 'Gold'];
 
 export const HATS = [
   'No hat',
@@ -47,6 +49,13 @@ export const HATS = [
   'Beanie',
   'Flower',
   'Pirate hat',
+  // Unlock-only (achievements):
+  'Laurel wreath',
+  'Golden trophy',
+  'Hard hat',
+  'Space helmet',
+  'Detective cap',
+  'Jester hat',
 ];
 
 // One colour theme per minigame variant (each round looks different).

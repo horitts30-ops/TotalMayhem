@@ -1,11 +1,13 @@
-# TOTAL MAYHEM  (seven minigames + a coin shop)
+# TOTAL MAYHEM  (seven minigames, a coin shop, power-ups, achievements and music)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
 silly minigames. **This version has seven minigames: "Crumble Floor" (on seven
 different floors), "Gold Grab", "Hot Potato", "Hill Hustle", "Prop Hunt", "Meteor Mayhem"
 and "Crown Chaos".** A match mixes them. Finishing rounds earns **coins** that you spend in
-the **Shop** on hats, skins and colors (cosmetics only, see section 3).
+the **Shop** on hats, skins and colors (cosmetics only), you can buy small one-round
+**power-ups** at a **pit stop** between rounds, and **26 achievements** unlock special hats and
+skins that coins cannot buy (all explained in section 3).
 
 ---
 
@@ -38,7 +40,11 @@ Stop the server with `Ctrl+C` in the terminal.
 | Move | `W A S D` or arrow keys |
 | **Jump** | `Space` |
 | Shove (also: pass the bomb in Hot Potato; drop goo as a Crumble Floor ghost; **disguise / undisguise** as a Prop Hunt hider; **smack** as the Prop Hunt seeker) | `E` or `Shift` |
-| Mute / unmute | `M` |
+| Music on / off | `N` (or the music button in the bottom-right corner) |
+| Mute / unmute all sound | `M` |
+
+At the **pit stop** between rounds you use the mouse: click a power-up card to buy it, click it
+again to get your coins back, then click **I'm ready**.
 
 ---
 
@@ -166,6 +172,67 @@ At the end of every round, the results screen hands out silly titles such as
 "Gravity's Favorite", "Coin Goblin", "Human Firework", "King of the Hill", "Master of
 Disguise" or "Untouchable".
 
+### Music
+
+There is background music, and **it is made entirely by code** (no audio files, no downloads, no
+licensing): the browser plays every note live, the same way as the sound effects. Each part of the
+game has its own little tune: the title screen and lobby, the intro card, each of the seven minigames
+(each in its own key, tempo and mood, e.g. a sneaky low one for Prop Hunt and a frantic one for Hot
+Potato), the pit stop, the results and the final scoreboard. The music fades between scenes and goes
+quiet during the 3-2-1 countdown so you can hear the ticks.
+
+* **`N`** or the music button turns just the music off (remembered in your browser); **`M`** mutes everything.
+* It starts after your first click or key press (browsers do not allow sound before that).
+* It pauses while the tab is in the background.
+* The music is kept quieter than the sound effects. To change the loudness, edit `MUSIC_VOLUME` at the
+  bottom of `public/js/music.js`.
+* All tunes are original loops (simple chord progressions). To change or add one, see the `STYLES` list at
+  the top of `public/js/music.js`: tempo, key, chords, bass, drums and the melody's rhythm.
+
+### Pit stop and power-ups (between rounds)
+
+After a round (except the last), if somebody has enough to afford one, the room gets a **pit stop**
+of up to 15 seconds. It ends early as soon as everybody clicks **I'm ready**. Players who are
+away or disconnected never hold it up.
+
+| Power-up | Effect for the next round | Price |
+|---|---|---|
+| Speedy Shoes | run 12% faster | 20 |
+| Bouncy Boots | jump 18% higher | 20 |
+| Quick Hands | shove recharges 30% faster | 25 |
+| Long Arms | shove reaches 25% further | 20 |
+| Sturdy Soles | shoves push you 35% less | 20 |
+
+**Why this is not "pay to win" (the original brief says no pay-to-win):**
+* They are bought with a separate **pit-stop purse**, not your shop coins. Everybody's purse starts
+  at **0 at the start of every match** and fills with the same amount a round pays out in coins.
+  Nothing carries over from older matches, and nothing is ever bought with real money.
+* Boosts are small, **last one round only**, and you can carry **at most two**.
+* **Last place pays 30% less** (when there are 3 or more players and scores are not all level).
+* The server keeps the purse and does every purchase, so a modified browser cannot give itself
+  free power-ups. You can refund a power-up until the pit stop closes.
+* If nobody can afford even the cheapest power-up, the pit stop is skipped. To switch power-ups
+  off completely, set `PITSTOP_MS: 0` in `server/config.js`. Prices and numbers are in
+  `server/powerups.js`.
+
+### Achievements and trophy hats (cosmetics only)
+
+Click **Trophies** on the title screen, in the lobby or on the final scoreboard to see all 26
+achievements with progress bars. A pop-up appears when you unlock one. Examples: win a round,
+win a match, win each of the seven minigames, jump 100 times, earn 10 silly titles, knock out 3
+players in one Crumble Floor round, earn 500 coins in total.
+
+Ten of them give a **special hat or skin that coins cannot buy**: Laurel wreath, Golden trophy,
+Hard hat, Space helmet, Detective cap, Jester hat, and the Bubbles, Flames, Galaxy and Gold
+skins. In the Shop they show a trophy instead of a price, and tell you which achievement unlocks
+them. They change only how you look.
+
+* Wins and finished matches **only count when somebody else was in the room**, so you cannot
+  unlock the match achievements by practising alone.
+* Each round and match is counted once, even if you refresh the page on the results screen.
+* Saved in your browser (`tm_trophies`), like your coins. A person who edits their own saved data
+  can give THEMSELVES a hat; it cannot affect anybody else's game.
+
 ### Coins and the Shop (cosmetics only)
 
 * **Earning:** everybody who plays a round with others earns **10 coins**, plus the points
@@ -176,7 +243,8 @@ Disguise" or "Untouchable".
 * **Spending:** click **Shop** on the title screen, in the lobby, or on the final scoreboard.
   Pick Hats, Skins or Colors, click an item to preview it on your character, then Buy. Some
   items are free from the start; the cheapest paid ones are about one match, and the best
-  (the Crown hat, the Rainbow skin) take a few matches. Locked colors show a padlock.
+  (the Crown hat, the Rainbow skin) take a few matches. Locked colors show a padlock, and the
+  ten trophy items show a trophy (see above).
 * **It only buys looks.** Nothing in the shop changes how a minigame plays. There is no
   gambling, no random boxes and nothing for real money.
 * **Where it is saved:** in your browser (`localStorage`), like your name and look. It stays
@@ -217,7 +285,10 @@ There are four different levels of "multiplayer", and it matters which one you a
 
 Tick these off yourself (I tested the same flows with automated tests, but nothing replaces eyes and fingers):
 
-- [ ] Title screen shows; the colour swatches (12), hat arrows (16 hats) and skin arrows (8 body patterns) change the character
+- [ ] Title screen shows; the colour swatches (12), hat arrows and skin arrows change the character (you start with a handful; the rest come from the Shop or Trophies)
+- [ ] Resize the browser window very wide and very tall: there are **no black bars**, the background colour just continues to the edges
+- [ ] After a round with coins in your purse, a **Pit stop!** screen appears: buy a power-up, click it again to refund, click "I'm ready"; the next intro card lists "Your power-ups"
+- [ ] Finishing your first round pops up "Achievement unlocked!"; the **Trophies** screen shows progress
 - [ ] "Create a room" gives a 4-letter code and a lobby
 - [ ] Second window joins with the code and appears in the first window's lobby
 - [ ] "Copy invite link" copies a link; opening it pre-fills the code
@@ -239,7 +310,9 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 - [ ] Hot Potato: the bomb appears next to one player with a countdown that flashes faster near the end; shoving passes it ("TAG!"); BOOM shakes the screen; a jump dodges the shove
 - [ ] Hill Hustle: standing alone on the hill makes it your colour with a crown; two players turn it red; a "NEXT" ring appears before it hops
 - [ ] The top-right pill and the score chips make sense in each game (coins / booms / seconds)
-- [ ] Press `M`: sound toggles
+- [ ] Press `M`: sound toggles. Press `N`: only the music toggles
+- [ ] Music plays after your first click, changes between the lobby, each minigame, the pit stop and the final screen, and is quiet during 3-2-1
+- [ ] The music is not too loud next to the sound effects (if it is, lower `MUSIC_VOLUME` in `public/js/music.js`)
 
 ---
 
@@ -249,7 +322,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **155 automated tests** (about 30 seconds):
+runs **206 automated tests** (about 45 seconds):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -268,18 +341,33 @@ runs **155 automated tests** (about 30 seconds):
   practice, meteor warning / landing / jump-over / breather / fewest hits wins, crown pickup,
   knock-off, lockout, shield, overheat, crown leaving the arena, and fuzzed full rounds for
   every variant and 1-8 players.
-* `tests/shop.test.js` (15 tests) - coin rewards (everybody earns, winning is only a little more,
+* `tests/powerups.test.js` (22 tests) - the catalogue and price rules, the pit stop in a room (only open
+  between rounds, cannot overspend / duplicate / carry a third / buy nonsense, last-place discount,
+  exact refunds, ends when everyone is ready or time is up, skipped when nobody can afford anything,
+  boosts last one round, the purse starts at 0 each match) and the effect of every boost inside the
+  games (including Prop Hunt) and that junk values cannot break a game.
+* `tests/achievements.test.js` (18 tests) - every achievement and reward is valid, each round/match is
+  counted once (reload-safe), no wins from solo practice, Hat Trick must be in one match, per-game
+  wins, totals that unlock hats and skins, rewards are unlock-only and granted once, damaged saved
+  data is repaired, and the server sends the fields the trophy case needs.
+* `tests/music.test.js` (8 tests) - every tune has a sensible tempo, key, chords and drums; every note is
+  in a comfortable range and not silent; each tune is identical every time and loops cleanly; the melody
+  never leaves its key; each tune is different from the others; every screen and every minigame has music
+  and the countdown is silent; and the player is safe to call before the browser unlocks sound.
+* `tests/shop.test.js` (17 tests) - coin rewards (everybody earns, winning is only a little more,
   leaving earns nothing, solo is flat) and the shop (free starter items, exact prices, cannot
   buy twice or when too poor, coins paid once per round even if a screen is replayed, damaged or
   hand-edited saves are repaired, the < > buttons only visit owned items, old saved looks are
-  swapped for owned ones, how long a match takes to earn an item).
-* `tests/network.test.js` (23 tests) - a real server with real WebSocket clients: rooms,
+  swapped for owned ones, how long a match takes to earn an item, and that trophy items cannot be bought
+  with any number of coins).
+* `tests/network.test.js` (24 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
   reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety, and
   a 5-round match that mixes every minigame over the network, coin rewards in the results and
-  final standings (and a new match id per match), and a Prop Hunt match where the seeker's real
-  network data is checked for leaks.
+  final standings (and a new match id per match), a Prop Hunt match where the seeker's real
+  network data is checked for leaks, and a pit stop over real sockets (the server keeps the purse,
+  rejects cheats, shows everybody's loadout, and the boost is gone after one round).
 
 (There is more testing that is not part of `npm test`: I also loaded the real web page in
 a real headless Chromium against the real server, with several browser windows playing, and
@@ -309,7 +397,7 @@ the project, so it will not appear in `npm test`.)
   codes can never spell a word). If your connection drops, your seat is kept
   for 30 seconds and you automatically return to it. The "seat" is stored in the
   tab's `sessionStorage`.
-* **Phases:** lobby -> intro -> playing -> results -> (repeat) -> final.
+* **Phases:** lobby -> intro -> playing -> results -> (pit stop) -> intro ... -> final.
 
 ### Project layout
 
@@ -334,6 +422,7 @@ total-mayhem/
       meteorMayhem.js     ALL the rules of Meteor Mayhem
       crownChaos.js       ALL the rules of Crown Chaos
     rewards.js            how many coins a round / match is worth
+    powerups.js           the pit-stop power-ups: catalogue, prices, limits
   public/                 everything the browser downloads
     index.html            the screens
     style.css             colours and layout of menus
@@ -341,6 +430,8 @@ total-mayhem/
       main.js             connects everything: screens, snapshots, effects, HUD
       renderer.js         draws characters, hats, tiles, coins, bomb, hill, props, meteors, crown, goo, particles (no image files!)
       shop.js             the shop catalogue, prices and the coin wallet (no drawing, easy to test)
+      music.js            the background music: tunes as data + the player (no audio files)
+      achievements.js     the 26 achievements, counting, and which ones give a hat or skin (easy to test)
       constants.js        colours, skin names, hat names, floor themes
       audio.js            synthesized placeholder sound effects
       input.js            keyboard handling
@@ -350,6 +441,9 @@ total-mayhem/
     minigames.test.js     Gold Grab / Hot Potato / Hill Hustle + schedule tests
     minigames2.test.js    Prop Hunt / Meteor Mayhem / Crown Chaos tests
     shop.test.js          coin rewards + shop tests
+    powerups.test.js      pit stop + power-up tests
+    achievements.test.js  trophy case tests
+    music.test.js         music tests
     network.test.js       multiplayer tests
 ```
 
@@ -365,12 +459,17 @@ total-mayhem/
   (fuse length, pass protection, shockwave) and `hillHustle.js` (hill size, how often it
   hops). The shared feel (speed, jump, shove) is the `TUNING` block in `arenaBase.js`.
 * **Shop prices:** the three `*_PRICES` lists at the top of `public/js/shop.js` (0 = free from
-  the start). **How many coins things pay:** the `REWARD` block in `server/rewards.js`.
+  the start, `U` = unlock-only). **How many coins things pay:** the `REWARD` block in `server/rewards.js`.
 * **Match length / number of players / intro and results duration:** `server/config.js`.
 * **Colours, hats, skins, floor looks:** names and colours are in `public/js/constants.js`;
   the drawing code (`drawHat`, `drawSkin`, `drawTileDeco`) is in `public/js/renderer.js`.
   If you add a hat or skin, also raise `HAT_COUNT` / `SKIN_COUNT` (and `COLOR_COUNT`
-  for colours) in `server/config.js`, because the server range-checks those numbers.
+  for colours) in `server/config.js`, because the server range-checks those numbers, add a
+  price (or `U`) in `shop.js`, and a height in `HAT_HEIGHT` in `renderer.js` for hats.
+* **Achievements:** the `ACHIEVEMENTS` list at the top of `public/js/achievements.js` (name,
+  goal, and an optional `reward: { kind, index }` for a trophy hat or skin).
+* **Power-ups:** `server/powerups.js` (effects, prices, how many you may carry, the last-place
+  discount). **Pit-stop length:** `PITSTOP_MS` in `server/config.js`.
 * **Adding a floor:** add an entry to `VARIANTS` in `server/games/crumbleFloor.js`
   (name, tagline, speed multipliers, a `theme` name; optional `gravity` / `jump`
   multipliers) and a matching theme in `THEMES` in `public/js/constants.js`.
@@ -426,7 +525,9 @@ in Milestone 6, not as tested instructions:
 Nothing is saved on the server and there are no accounts. What exists today:
 
 * Your name, colour, hat and skin are remembered in your browser (`localStorage`).
-* Your **coins and the items you bought** are remembered the same way (`tm_wallet`).
+* Your **coins and the items you bought** are remembered the same way (`tm_wallet`), and your
+  **achievements** too (`tm_trophies`).
+* The **pit-stop purse is the exception**: the server keeps it, for the match only.
 * Match scores last for the match only.
 
 `localStorage` is free and simple but tied to one browser and editable by the player, which is
@@ -456,7 +557,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 155 automated tests pass.
+* All 206 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -475,17 +576,27 @@ ever want coins to follow players between devices, that is the step to take.
   and the crown. I also bought items in the shop, saw the items stay after a reload, watched coins
   being paid in the results and final screens, and checked that reloading the page in the
   middle of the final screen does not pay twice. No page errors appeared.
+* **Real browsers, this release:** three headless Chromium windows (one very wide, one tall) played
+  a match against the real server: the pit-stop screen, buying, refunding, "I'm ready", the
+  last-place discount, the intro listing your power-ups, the black-bar fix (checked pixel colours at
+  the edge of the game), the trophy screen, unlock pop-ups, the unlock-only hints in the shop, and
+  all ten new hats and skins drawn up close. Reloading on the results/final screen did not count
+  anything twice. No page errors appeared.
+* **Music, measured but not heard:** in real Chromium I measured the actual audio output of every tune
+  (they all play, at moderate volume without clipping), checked that `N` and `M` silence it, that the
+  countdown is quiet and that the tune changes with the screen. I cannot hear it, so whether it sounds
+  *good* (and how loud it is on your speakers) is for your ears to judge.
 * The new floors' *feel* (Moonbase jump height, Swamp Stomp steering, how fast Lava Lounge
   collapses) is untuned: the tests prove they run and finish, not that they are fun.
 * **The balance of the new minigames is untested by humans**: how many coins spawn, how
   long the bomb fuse is, how big the hill is, how strong shoves are, how long Prop Hunt hiders
   have to hide, how strong the seeker is, how fast meteors fall, and how long the crown lasts.
-  Likewise the **shop prices and coin rewards** are first guesses. These are first guesses
+  Likewise the **shop prices, coin rewards, power-up strengths and prices, and achievement goals** are first guesses. These are first guesses
   and need a few real play sessions to tune.
 
 **Not verified (please check these yourself):**
-* I could not open the game in a real browser, so I have **not** felt the controls,
-  heard the sounds, or seen the animation at 60 frames per second. The checklist in
+* I cannot play it as a human: I have **not** felt the controls,
+  heard the sounds, or watched the animation at 60 frames per second. The checklist in
   section 4 covers this. **The jump distance, shove strength and crumble speed are
   my best guesses; expect to tune them after your first few rounds.**
 * Playing across different browsers, high-DPI screens and slow connections.
@@ -498,7 +609,10 @@ ever want coins to follow players between devices, that is the step to take.
 * No bots, so solo testing means an idle second window.
 * Your own movement waits for the server's answer (a few milliseconds on a home
   network). A smoother "client-side prediction" is planned for Milestone 6.
-* Sounds are generated placeholders. Achievements are not built yet.
+* Sounds and music are generated by code (simple synthesizer tones), not recorded: they are charming
+  but basic. Real recorded music could replace them later.
+* Achievements are counted in the player's own browser, so they follow that browser, not a person.
+* Power-ups are tuned by guess: 12-30% boosts that are meant to be fun, not decisive.
 * Coins live in each player's own browser (see "Coins and the Shop").
 * Room data lives in memory: restarting the server ends all rooms.
 
@@ -512,7 +626,7 @@ ever want coins to follow players between devices, that is the step to take.
 | 2. First playable minigame | Done (and it is already networked, see the reordering note below) |
 | 3. Minigame framework + more minigames | Done: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle, Prop Hunt, Meteor Mayhem, Crown Chaos |
 | 4. Online multiplayer hardening | Mostly done early; remaining: deployment testing, stress tests |
-| 5. Sabotage variety, achievements, cosmetic unlocks | **Cosmetic unlocks done** (coin shop); sabotage variety and achievements planned |
+| 5. Sabotage variety, achievements, cosmetic unlocks | **Done:** coin shop, pit-stop power-ups, 26 achievements with trophy hats and skins. Still planned: more sabotage variety |
 | 6. Polish, prediction, touch controls, deployment guide | Planned |
 
 **Why I reordered:** the brief suggests networking in Milestone 4, but I built the first
