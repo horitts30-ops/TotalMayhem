@@ -62,6 +62,11 @@ function createGameServer(options = {}) {
     };
     const cbOf = (cb) => (typeof cb === 'function' ? cb : () => {});
 
+    // Lets the game measure its own ping (shown with the F3 overlay).
+    socket.on('net:ping', (cb) => {
+      if (typeof cb === 'function') cb();
+    });
+
     const leaveCurrentRoom = (remove) => {
       const { room, player } = lookup();
       if (room && player) {
@@ -252,7 +257,10 @@ function createGameServer(options = {}) {
         httpServer.listen(port, host, () => {
           httpServer.off('error', reject);
           last = Date.now();
-          timer = setInterval(loop, Math.round(1000 / cfg.TICK_RATE));
+          // Wake up ~3x per tick. A single 33 ms timer that fires a few ms late
+          // makes the world advance in uneven bursts (felt as judder); waking
+          // often lets each fixed step run right on time.
+          timer = setInterval(loop, Math.max(4, Math.floor(1000 / cfg.TICK_RATE / 3)));
           resolve(httpServer.address().port);
         });
       });

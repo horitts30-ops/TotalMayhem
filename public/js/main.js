@@ -26,7 +26,8 @@ import {
 } from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
-const INTERP_MS = 100; // other players are drawn this far in the past, for smoothness
+const INTERP_MIN = 55; // other players are drawn this far in the past (ms), for smoothness...
+const INTERP_MAX = 160; // ...it adapts between these two to the network's current steadiness
 
 // =============================================================== state
 const S = {
@@ -47,6 +48,10 @@ const S = {
   hudSig: '',
   rejoining: false,
   booted: false,
+  interp: 90, // current interpolation delay in ms (adapts)
+  net: { lastSnapAt: 0, mean: 33, jitter: 4, snapsPerSec: 0, snapCount: 0, ping: null },
+  perf: { frames: 0, since: performance.now(), fps: 60, worst: 0, lowWins: 0, goodWins: 0 },
+  showPerf: /[?&]debug\b/.test(location.search),
 };
 
 function storage() {
@@ -150,6 +155,7 @@ function showView(v) {
   $('screen-title').classList.toggle('hidden', v !== 'title');
   $('screen-lobby').classList.toggle('hidden', v !== 'lobby');
   $('stage-wrap').classList.toggle('hidden', v !== 'stage');
+  document.body.classList.toggle('in-arena', v === 'stage');
   if (v === 'stage') fitStage();
 }
 
@@ -750,6 +756,7 @@ function openShop(kind, index) {
   if (KINDS.includes(kind) && Number.isInteger(index)) SHOP.sel[kind] = index;
   $('overlay-shop').classList.remove('hidden');
   $('shop-msg').textContent = '';
+  afterUnlocks([]); // hands over any earned trophy rewards you are somehow missing
   renderShop();
   sfx.click();
 }
@@ -803,7 +810,7 @@ function renderShop() {
     }
     card.appendChild(el('div', 'nm', item.name));
     const lockedByAch = !owned && isUnlockOnly(item.kind, item.index);
-    const tag = el('div', 'tag' + (lockedByAch ? ' ach' : ''), owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : lockedByAch ? 'Trophy' : String(item.price));
+    const tag = el('div', 'tag' + (lockedByAch ? ' ach' : ''), owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : lockedByAch ? (S.trophies.unlocked[(achievementFor(item.kind, item.index) || {}).id] ? 'Claim!' : 'Trophy') : String(item.price));
     card.appendChild(tag);
     card.addEventListener('click', () => {
       SHOP.sel[item.kind] = item.index;
@@ -830,13 +837,24 @@ function renderShop() {
     act.disabled = false;
   } else if (isUnlockOnly(kind, idx)) {
     const a = achievementFor(kind, idx);
-    act.textContent = '\u{1F3C6} Unlock with a trophy';
-    act.disabled = true;
-    act.classList.add('need');
+    const earned = !!(a && S.trophies.unlocked[a.id]);
+    if (earned) {
+      // The trophy is yours: one tap to claim the reward.
+      act.textContent = '\u{1F3C6} Claim your reward!';
+      act.disabled = false;
+    } else {
+      act.textContent = '\u{1F512} Locked - earn the trophy first';
+      act.disabled = true;
+      act.classList.add('need');
+    }
     if (a) {
       const hint = el('div', 'shop-hint');
       hint.appendChild(el('b', null, `${a.icon} ${a.name}: `));
       hint.appendChild(document.createTextNode(a.desc));
+      if (!earned) {
+        const pr = progressOf(S.trophies, a);
+        if (pr.goal > 1) hint.appendChild(document.createTextNode(` (${pr.value} / ${pr.goal})`));
+      }
       $('shop-item').appendChild(hint);
     }
   } else if (S.wallet.coins >= price) {
@@ -854,7 +872,20 @@ function shopAction() {
   const idx = SHOP.sel[kind];
   const msg = $('shop-msg');
   msg.classList.remove('good');
-  if (!owns(S.wallet, kind, idx)) {
+  if (!owns(S.wallet, kind, idx) && isUnlockOnly(kind, idx)) {
+    // Trophy item: hand it over if the achievement is really unlocked.
+    const given = applyRewards(S.trophies, S.wallet);
+    if (!owns(S.wallet, kind, idx)) {
+      msg.textContent = 'Earn the trophy first - see the hint above.';
+      renderShop();
+      return;
+    }
+    saveWalletNow();
+    sfx.jackpot();
+    afterUnlocks(recordOwned(S.trophies, S.wallet));
+    msg.textContent = given.length ? 'Reward claimed! Now wearing it.' : 'Now wearing it.';
+    msg.classList.add('good');
+  } else if (!owns(S.wallet, kind, idx)) {
     const res = buy(S.wallet, kind, idx);
     if (!res.ok) {
       msg.textContent = res.error;
@@ -980,7 +1011,9 @@ socket.on('room:kicked', (info) => {
 socket.on('game:snap', (snap) => {
   if (!S.room || S.room.phase !== 'playing') return;
   snap.map = new Map(snap.ps.map((p) => [p.id, p]));
-  S.snaps.push({ r: performance.now(), s: snap });
+  const arrived = performance.now();
+  trackSnapshotTiming(arrived);
+  S.snaps.push({ r: arrived, s: snap });
   if (S.snaps.length > 16) S.snaps.shift();
   handleEvents(snap);
   // Hot Potato: tick faster and louder for the last three seconds of the fuse.
@@ -1185,12 +1218,77 @@ function handleEvents(snap) {
   }
 }
 
+// Watches how evenly snapshots arrive. Steady network -> draw other players only
+// a little in the past (snappy); bumpy network -> a bit further back (smooth).
+function trackSnapshotTiming(at) {
+  const n = S.net;
+  if (n.lastSnapAt) {
+    const gap = at - n.lastSnapAt;
+    if (gap < 1000) {
+      n.mean += (gap - n.mean) * 0.05;
+      n.jitter += (Math.abs(gap - n.mean) - n.jitter) * 0.05;
+      const target = Math.min(INTERP_MAX, Math.max(INTERP_MIN, n.mean * 1.5 + n.jitter * 3));
+      S.interp += (target - S.interp) * 0.03; // glide, never jump
+    }
+  }
+  n.lastSnapAt = at;
+  n.snapCount++;
+}
+
+// Measures round-trip time to the server a couple of times per second.
+setInterval(() => {
+  if (!socket.connected) return;
+  const t0 = performance.now();
+  socket.timeout(3000).emit('net:ping', (err) => {
+    if (!err) S.net.ping = Math.round(performance.now() - t0);
+  });
+}, 2000);
+
+// Looks after the frame rate: if the computer cannot keep up, quietly draw at a
+// lower resolution (it looks almost the same but is much cheaper); if there is
+// plenty of spare speed, bring the sharpness back.
+function trackFrameRate(now, frameMs) {
+  const p = S.perf;
+  p.frames++;
+  p.worst = Math.max(p.worst, frameMs);
+  if (now - p.since < 1000) return;
+  p.fps = Math.round((p.frames * 1000) / (now - p.since));
+  const playing = S.view === 'stage' && document.visibilityState === 'visible';
+  if (playing) {
+    if (p.fps < 48) {
+      p.lowWins++;
+      p.goodWins = 0;
+    } else if (p.fps >= 57) {
+      p.goodWins++;
+      p.lowWins = 0;
+    } else {
+      p.lowWins = 0;
+      p.goodWins = 0;
+    }
+    if (p.lowWins >= 2 && renderer.setQuality(renderer.quality * 0.8)) p.lowWins = 0;
+    else if (p.goodWins >= 8 && renderer.setQuality(renderer.quality / 0.8)) p.goodWins = 0;
+  }
+  $('perf-hud').classList.toggle('hidden', !S.showPerf);
+  if (S.showPerf) {
+    const n = S.net;
+    $('perf-hud').textContent =
+      `FPS ${p.fps}   worst frame ${Math.round(p.worst)} ms\n` +
+      `ping ${n.ping == null ? '?' : n.ping} ms   snaps/s ${n.snapCount}\n` +
+      `render delay ${Math.round(S.interp)} ms   jitter ${n.jitter.toFixed(1)} ms\n` +
+      `resolution x${renderer.px.toFixed(2)}  (quality ${renderer.quality.toFixed(2)})`;
+  }
+  S.net.snapCount = 0;
+  p.frames = 0;
+  p.worst = 0;
+  p.since = now;
+}
+
 // Build the world to draw "right now" from the buffered snapshots.
 function sampleFrame(now) {
   const buf = S.snaps;
   if (buf.length === 0) return null;
   const latest = buf[buf.length - 1];
-  const renderT = now - INTERP_MS;
+  const renderT = now - S.interp;
   let i = buf.length - 1;
   while (i > 0 && buf[i].r > renderT) i--;
   const a = buf[i];
@@ -1369,8 +1467,10 @@ function updateTimersText(now) {
 }
 
 function loop(now) {
-  const dt = Math.min(0.05, (now - S.lastFrame) / 1000);
+  const frameMs = now - S.lastFrame;
+  const dt = Math.min(0.05, frameMs / 1000);
   S.lastFrame = now;
+  trackFrameRate(now, frameMs);
 
   if (S.view === 'stage') {
     const frame = sampleFrame(now);
@@ -1434,6 +1534,10 @@ function bindUi() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && SHOP.open) closeShop();
     if (e.key === 'Escape' && TRO.open) closeTrophies();
+    if (e.key === 'F3') {
+      e.preventDefault();
+      S.showPerf = !S.showPerf;
+    }
   });
 
   $('btn-leave').addEventListener('click', leaveRoom);

@@ -29,6 +29,10 @@ body {
   background-size: 500% 500%;
   animation: bgshift 22s ease infinite;
 }
+/* While you are in the arena the animated page background is hidden behind the
+   game anyway, so stop it: repainting a huge moving gradient every frame is a
+   big cost on slower computers. */
+body.in-arena { animation: none; }
 @keyframes bgshift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -495,4 +499,11 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
 .mute.music.off::after {
   content: ""; position: absolute; left: 9px; right: 9px; top: 50%; height: 4px; background: var(--ink);
   border-radius: 2px; transform: rotate(-35deg);
+}
+
+/* F3 performance overlay */
+#perf-hud {
+  position: fixed; right: 8px; top: 76px; z-index: 99; pointer-events: none;
+  font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #fff;
+  background: rgba(0,0,0,0.62); padding: 6px 9px; border-radius: 8px; white-space: pre;
 }

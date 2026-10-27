@@ -685,3 +685,27 @@ test('power-ups over the network: the server keeps the purse, rejects cheats, an
     await until(() => mine(host, richId).power.length === 0, 3000, 'power-up used up after one round');
   });
 });
+
+test('smoothness: ping answers at once, and snapshots arrive steadily (no long gaps)', async () => {
+  await withServer({ INTRO_MS: 100 }, {}, async ({ mk }) => {
+    const host = await mk();
+    // The ping used by the F3 overlay: answered immediately, junk arguments are ignored.
+    const t0 = Date.now();
+    await new Promise((resolve) => host.emit('net:ping', resolve));
+    assert.ok(Date.now() - t0 < 500, 'ping answered quickly');
+    host.emit('net:ping', 'not a function');
+    host.emit('net:ping');
+
+    await ask(host, 'room:create', { name: 'Host' });
+    await ask(host, 'match:start', null);
+    await until(() => host.state.phase === 'playing', 5000, 'playing');
+    host.snaps.length = 0;
+    const times = [];
+    host.on('game:snap', () => times.push(Date.now()));
+    await sleep(1500);
+    assert.ok(times.length >= 35, `about 30 snapshots per second (got ${times.length} in 1.5 s)`);
+    let worst = 0;
+    for (let i = 1; i < times.length; i++) worst = Math.max(worst, times[i] - times[i - 1]);
+    assert.ok(worst < 160, `no long hiccups between snapshots (worst gap ${worst} ms)`);
+  });
+});

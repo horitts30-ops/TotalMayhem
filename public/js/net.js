@@ -2,7 +2,9 @@
 // <script src="/socket.io/socket.io.js"> which the server provides.
 
 /* global io */
-export const socket = io();
+// WebSocket first (lowest delay). Plain HTTP polling stays as a fallback for
+// networks that block websockets.
+export const socket = io({ transports: ['websocket', 'polling'] });
 
 // Send a message and wait for the server's answer (or a friendly timeout).
 // `onAnswer` (optional) runs immediately when the answer arrives, before any

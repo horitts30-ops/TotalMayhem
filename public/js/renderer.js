@@ -987,6 +987,10 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.px = 1;
+    this.quality = 1; // 0.5 - 1; main.js lowers it automatically if the game runs slowly
+    this.cssScale = 1;
+    this.tileLayer = null; // offscreen picture of the floor that is not cracking
+    this.tileSig = '';
     this.clock = 0;
     this.shakeAmt = 0;
     this.particles = [];
@@ -1008,10 +1012,22 @@ export class Renderer {
 
   // cssScale = how much the stage is scaled on screen (for crisp rendering)
   resize(cssScale) {
+    if (cssScale) this.cssScale = cssScale;
     const dpr = window.devicePixelRatio || 1;
-    this.px = clamp(cssScale * dpr, 0.5, 2.5);
+    // Capped at 1.5x: beyond that the picture is barely sharper but costs a lot
+    // more to paint. `quality` lowers it further when a computer struggles.
+    this.px = clamp(this.cssScale * dpr * this.quality, 0.5, 1.5);
     this.canvas.width = Math.round(STAGE_W * this.px);
     this.canvas.height = Math.round(STAGE_H * this.px);
+    this.tileSig = ''; // the cached floor must be repainted at the new size
+  }
+
+  setQuality(q) {
+    const next = clamp(q, 0.5, 1);
+    if (Math.abs(next - this.quality) < 0.01) return false;
+    this.quality = next;
+    this.resize();
+    return true;
   }
 
   reset() {
@@ -1219,21 +1235,55 @@ export class Renderer {
     return (c + r) % 2 === 0 ? theme.tileA : theme.tileB;
   }
 
+  // The floor is mostly standing tiles that never change, so they are painted
+  // ONCE into an offscreen picture and then copied each frame. Only tiles that
+  // are cracking (and their neighbours, which overlap them) are painted live.
   drawTiles(ctx, frame, theme) {
     const { tiles, cols } = frame;
-    // 1) pits first (so holes read as holes)
-    for (let i = 0; i < tiles.length; i++) {
-      if (tiles[i] !== 'x') continue;
-      const c = i % cols;
-      const r = Math.floor(i / cols);
-      ctx.fillStyle = 'rgba(15,5,40,0.38)';
-      rr(ctx, OX + c * TILE + 3, OY + r * TILE + 3, TILE - 6, TILE - 6, 10);
-      ctx.fill();
+    // Cache key: which tiles stand perfectly still / are holes (cracking tiles
+    // all look like "_" here because they are drawn live).
+    const sig = `${frame.theme}|${this.canvas.width}|${tiles.replace(/[1-9]/g, '_')}`;
+    if (sig !== this.tileSig || !this.tileLayer) {
+      if (!this.tileLayer) this.tileLayer = document.createElement('canvas');
+      this.tileLayer.width = this.canvas.width;
+      this.tileLayer.height = this.canvas.height;
+      const lc = this.tileLayer.getContext('2d');
+      lc.setTransform(this.px, 0, 0, this.px, 0, 0);
+      this.paintTiles(lc, tiles, cols, theme, (ch) => ch === '0' || ch === 'x');
+      this.tileSig = sig;
     }
-    // 2) standing tiles
+    ctx.drawImage(this.tileLayer, 0, 0, STAGE_W, STAGE_H); // keeps the current transform (screen shake)
+
+    // Live part: cracking tiles, plus the still tiles that are drawn after (and
+    // so overlap) a cracking one - repainted on top to keep the same layering.
+    let any = false;
+    const redo = new Set();
     for (let i = 0; i < tiles.length; i++) {
       const ch = tiles[i];
-      if (ch === 'x' || ch === '_') continue;
+      if (ch === '0' || ch === 'x' || ch === '_') continue;
+      any = true;
+      redo.add(i);
+      for (const j of [i + 1, i + cols - 1, i + cols, i + cols + 1]) redo.add(j);
+    }
+    if (!any) return;
+    this.paintTiles(ctx, tiles, cols, theme, (ch, i) => redo.has(i) && ch !== 'x' && ch !== '_', true);
+  }
+
+  // Paints tiles in the usual order. `pick(ch, i)` chooses which ones to paint.
+  paintTiles(ctx, tiles, cols, theme, pick, skipPits = false) {
+    if (!skipPits) {
+      for (let i = 0; i < tiles.length; i++) {
+        if (tiles[i] !== 'x') continue;
+        const c = i % cols;
+        const r = Math.floor(i / cols);
+        ctx.fillStyle = 'rgba(15,5,40,0.38)';
+        rr(ctx, OX + c * TILE + 3, OY + r * TILE + 3, TILE - 6, TILE - 6, 10);
+        ctx.fill();
+      }
+    }
+    for (let i = 0; i < tiles.length; i++) {
+      const ch = tiles[i];
+      if (ch === 'x' || ch === '_' || !pick(ch, i)) continue;
       const c = i % cols;
       const r = Math.floor(i / cols);
       const prog = ch === '0' ? 0 : Number(ch) / 9;

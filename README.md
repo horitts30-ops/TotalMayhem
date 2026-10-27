@@ -233,6 +233,30 @@ them. They change only how you look.
 * Saved in your browser (`tm_trophies`), like your coins. A person who edits their own saved data
   can give THEMSELVES a hat; it cannot affect anybody else's game.
 
+### Trophy items in the Shop (v0.8.1)
+
+Trophy hats and skins show a **Trophy** tag. Before you earn the achievement the button reads
+"Locked - earn the trophy first" and the hint shows your progress (for example "0 / 500").
+The moment the achievement unlocks, the item is handed over automatically; if it is ever
+missing (for example you cleared your wallet), the shop shows a green **Claim your reward!**
+button that gives it to you. Coins still never buy these.
+
+### Smoothness (v0.8.0)
+
+If the game felt choppy, these are the fixes (the measurements are in section 9):
+
+* The page's animated rainbow background is switched off while you are in the arena (it was
+  repainting a huge moving gradient every frame for nothing).
+* The floor is painted **once** into a hidden picture and copied each frame; only cracking
+  tiles are painted live. This removed thousands of drawing commands per frame.
+* The picture's resolution is capped at 1.5x, and if your computer cannot keep up the game
+  **lowers it automatically** (and raises it again when there is spare speed).
+* The connection uses **WebSocket first** (lowest delay; plain polling is only a fallback),
+  and the server's clock wakes up more often so the world advances evenly instead of in bursts.
+* Other players are drawn a short moment in the past so they glide; that delay now **adapts**
+  (about 55-160 ms) to how steady your connection is.
+* **F3** shows an FPS / ping / snapshots-per-second panel so you can tell which kind of lag you have.
+
 ### Coins and the Shop (cosmetics only)
 
 * **Earning:** everybody who plays a round with others earns **10 coins**, plus the points
@@ -322,7 +346,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **206 automated tests** (about 45 seconds):
+runs **207 automated tests** (about 45 seconds):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -360,7 +384,7 @@ runs **206 automated tests** (about 45 seconds):
   hand-edited saves are repaired, the < > buttons only visit owned items, old saved looks are
   swapped for owned ones, how long a match takes to earn an item, and that trophy items cannot be bought
   with any number of coins).
-* `tests/network.test.js` (24 tests) - a real server with real WebSocket clients: rooms,
+* `tests/network.test.js` (25 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
   reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety, and
@@ -549,7 +573,7 @@ ever want coins to follow players between devices, that is the step to take.
 | Another computer cannot open the LAN address | Same Wi-Fi? Firewall allowing Node.js on private networks? Some guest/public Wi-Fi blocks devices from talking to each other. |
 | No sound | Click anywhere on the page first (browsers require it), and check the speaker button in the corner. |
 | The second window's character does not move | Keyboard input goes to the window you last clicked. That is normal. |
-| Controls feel laggy | Close heavy tabs. On the same computer lag should be tiny. Over the internet some delay is expected (prediction is on the Milestone 6 list). |
+| The game feels laggy / choppy | Press **F3** in the game (or open the page with `?debug` on the end of the address). It shows **FPS** (should be about 60), **ping** and **snapshots/s** (about 30). *Low FPS* = your computer is struggling: the game already lowers its own resolution automatically, but closing other heavy tabs/apps helps most. *High ping* (over ~80 ms) = the internet connection to the server is the slow part; hosting closer to your friends helps. Press F3 again to hide it. |
 | Changes to server files have no effect | Restart the server (`Ctrl+C`, then `npm start`). |
 
 ---
@@ -557,7 +581,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 206 automated tests pass.
+* All 207 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -601,6 +625,12 @@ ever want coins to follow players between devices, that is the step to take.
   my best guesses; expect to tune them after your first few rounds.**
 * Playing across different browsers, high-DPI screens and slow connections.
 * Real internet play (nothing is deployed).
+* **Smoothness on YOUR computer.** In a headless Chromium on a 2-core cloud machine (software
+  drawing, no graphics card) the arena went from 43-49 FPS to a steady 60 FPS at 1920x1080
+  (also with a 2x hi-res display), and the 3-window stress test improved from 19 to about
+  22-32 FPS (all three windows were fighting over 2 CPU cores, so that number says little).
+  I could not test a real graphics card, a real laptop, or a real internet connection. If it is
+  still laggy for you, press **F3** and tell me the FPS and ping numbers.
 
 **Known limitations in this milestone:**
 * Seven minigames so far. More can be added with the steps in section 6.
@@ -608,7 +638,8 @@ ever want coins to follow players between devices, that is the step to take.
 * Keyboard only; no touch/gamepad controls.
 * No bots, so solo testing means an idle second window.
 * Your own movement waits for the server's answer (a few milliseconds on a home
-  network). A smoother "client-side prediction" is planned for Milestone 6.
+  network, but your ping over the internet). "Client-side prediction" would hide that
+  and is planned for Milestone 6.
 * Sounds and music are generated by code (simple synthesizer tones), not recorded: they are charming
   but basic. Real recorded music could replace them later.
 * Achievements are counted in the player's own browser, so they follow that browser, not a person.
