@@ -30,7 +30,7 @@ const TUNING = {
   decoys: 16, // ordinary props lying around
   propTypes: 6, // crate, barrel, plant, rock, gift, cactus (client draws them)
   propRadius: 24,
-  smackRange: 78,
+  smackRange: 110, // bigger reach, like the shove in the other games (was 78)
   smackCone: 0.2,
   smackCooldown: 0.9,
   bonkStun: 1.0, // dizzy time for smacking a plain prop
@@ -171,6 +171,14 @@ class PropHunt extends ArenaGame {
     if (p.disguised) return false;
     if (p.role === 'seeker' && this._hidePhase()) return false;
     return true;
+  }
+
+  // Stamina: only a real smack costs energy (turning into a prop, or a blindfolded
+  // seeker pressing E, is free).
+  _shoveCost(p) {
+    if (p.role === 'hider') return 0;
+    if (this._hidePhase()) return 0;
+    return super._shoveCost(p);
   }
 
   _solid(p) {

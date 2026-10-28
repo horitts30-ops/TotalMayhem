@@ -1419,6 +1419,464 @@ export class Renderer {
     if (snap.cn) this.drawCoins(ctx, snap.cn);
     if (snap.mt) this.drawMeteors(ctx, snap.mt);
     if (snap.crown && !snap.crown.hd) this.drawCrownOnFloor(ctx, snap.crown);
+    // the newer minigames
+    if (snap.pt) this.drawPaint(ctx, frame, snap);
+    if (snap.cc) this.drawColorCall(ctx, snap.cc);
+    if (snap.rp) this.drawRope(ctx, frame, snap.rp);
+    if (snap.gid === 'lapDash' && frame.arena && frame.arena.track) this.drawTrack(ctx, frame, frame.arena.track);
+    if (snap.ds) this.drawDigSpots(ctx, snap.ds, frame.arena);
+    if (snap.mo) this.drawMoles(ctx, snap.mo, frame.arena);
+  }
+
+  // ----------------------------------------------------------- Paint Panic
+  // Every owned tile gets a splash of its owner's colour.
+  drawPaint(ctx, frame, snap) {
+    const own = snap.pt;
+    const ids = snap.pi || [];
+    for (let i = 0; i < own.length; i++) {
+      const ch = own[i];
+      if (ch === '.') continue;
+      const meta = frame.meta.get(ids[Number(ch)]);
+      const hex = meta ? COLORS[meta.color % COLORS.length].hex : '#ffffff';
+      const x = OX + (i % 14) * TILE;
+      const y = OY + Math.floor(i / 14) * TILE;
+      ctx.fillStyle = mix(hex, '#ffffff', 0.18);
+      rr(ctx, x + 3, y + 3, TILE - 6, TILE - 6, 11);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      rr(ctx, x + 9, y + 8, TILE - 26, 6, 3);
+      ctx.fill();
+      ctx.strokeStyle = mix(hex, '#000000', 0.3);
+      ctx.lineWidth = 2;
+      rr(ctx, x + 3, y + 3, TILE - 6, TILE - 6, 11);
+      ctx.stroke();
+    }
+  }
+
+  // ------------------------------------------------------------ Color Call
+  drawColorCall(ctx, cc) {
+    const COL = ['#ff595e', '#4da8ff', '#5fd36a', '#ffd23f'];
+    const NAMES = ['RED', 'BLUE', 'GREEN', 'YELLOW'];
+    const calling = cc.ph === 'call';
+    const checking = cc.ph === 'check';
+    const pulse = 0.5 + 0.5 * Math.sin(this.clock * (calling && cc.l < 1.2 ? 16 : 6));
+    for (let i = 0; i < ARENA_TILES.length; i++) {
+      if (ARENA_TILES[i] !== '0') continue;
+      const c = i % 14;
+      const r = Math.floor(i / 14);
+      // The zones split at the exact middle (y = 288), which cuts through the
+      // middle row of tiles, so that row is painted in two halves.
+      const top = r * TILE;
+      const parts = top < 288 && top + TILE > 288 ? [[top, 288 - top, 0], [288, top + TILE - 288, 2]] : [[top, TILE, top < 288 ? 0 : 2]];
+      for (const [y0, h, rowZone] of parts) {
+        const zone = (c < 7 ? 0 : 1) + rowZone;
+        const safe = cc.z.includes(zone);
+        const bad = cc.bad.includes(zone);
+        let a = 0.26;
+        if (calling || checking) a = safe ? 0.55 + 0.2 * pulse : bad ? 0.22 : 0.12;
+        ctx.fillStyle = COL[zone];
+        ctx.globalAlpha = a;
+        ctx.fillRect(OX + c * TILE + 2, OY + y0 + 1, TILE - 4, h - 2);
+        if (bad && calling) {
+          ctx.globalAlpha = 0.5;
+          ctx.strokeStyle = '#2a1a3c';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(OX + c * TILE + 12, OY + y0 + 6);
+          ctx.lineTo(OX + c * TILE + TILE - 12, OY + y0 + h - 6);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // zone names, and the big countdown in the middle
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    const spots = [[OX + 224, OY + 144], [OX + 672, OY + 144], [OX + 224, OY + 432], [OX + 672, OY + 432]];
+    ctx.font = `900 34px ${FONT}`;
+    for (let z = 0; z < 4; z++) {
+      ctx.globalAlpha = cc.z.includes(z) && (calling || checking) ? 0.95 : 0.4;
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = INK;
+      ctx.strokeText(NAMES[z], spots[z][0], spots[z][1] + 12);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(NAMES[z], spots[z][0], spots[z][1] + 12);
+    }
+    ctx.globalAlpha = 1;
+    if (calling) {
+      const n = Math.max(1, Math.ceil(cc.l));
+      ctx.font = `900 ${110 + 16 * pulse}px ${FONT}`;
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = INK;
+      ctx.globalAlpha = 0.85;
+      ctx.strokeText(String(n), OX + 448, OY + 322);
+      ctx.fillStyle = cc.bad.length ? '#ff9a8b' : '#ffffff';
+      ctx.fillText(String(n), OX + 448, OY + 322);
+      ctx.globalAlpha = 1;
+      ctx.font = `900 30px ${FONT}`;
+      const label = cc.bad.length ? `AVOID ${cc.bad.map((z) => NAMES[z]).join(' + ')}` : `GO TO ${NAMES[cc.z[0]]}`;
+      ctx.lineWidth = 8;
+      ctx.strokeText(label, OX + 448, OY - 6);
+      ctx.fillStyle = cc.bad.length ? '#ff9a8b' : COL[cc.z[0]];
+      ctx.fillText(label, OX + 448, OY - 6);
+    } else if (checking) {
+      ctx.font = `900 56px ${FONT}`;
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = INK;
+      ctx.strokeText('SPLAT CHECK!', OX + 448, OY + 305);
+      ctx.fillStyle = '#fff27a';
+      ctx.fillText('SPLAT CHECK!', OX + 448, OY + 305);
+    }
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------ Jump Rope Jam
+  drawRope(ctx, frame, rp) {
+    const cx = OX + 448;
+    const cy = OY + 288;
+    const dx = Math.cos(rp.a);
+    const dy = Math.sin(rp.a);
+    const hub = (frame.arena && frame.arena.rope && frame.arena.rope.hub) || 30;
+    const lift = 18; // the rope floats this high above the floor
+    // shadow on the floor
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(20,5,40,0.28)';
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(cx - dx * rp.len, cy - dy * rp.len);
+    ctx.lineTo(cx + dx * rp.len, cy + dy * rp.len);
+    ctx.stroke();
+    // the hub
+    ctx.fillStyle = '#7b5ea7';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, hub, hub * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // the rope itself, floating above the floor
+    const fast = clamp((rp.w - 1.2) / 2.2, 0, 1);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 17;
+    ctx.beginPath();
+    ctx.moveTo(cx - dx * rp.len, cy - dy * rp.len - lift);
+    ctx.lineTo(cx + dx * rp.len, cy + dy * rp.len - lift);
+    ctx.stroke();
+    ctx.strokeStyle = mix('#ffb703', '#ff4d4d', fast);
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(cx - dx * rp.len, cy - dy * rp.len - lift);
+    ctx.lineTo(cx + dx * rp.len, cy + dy * rp.len - lift);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([16, 22]);
+    ctx.lineDashOffset = -this.clock * 60;
+    ctx.beginPath();
+    ctx.moveTo(cx - dx * rp.len, cy - dy * rp.len - lift);
+    ctx.lineTo(cx + dx * rp.len, cy + dy * rp.len - lift);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // handles at the ends
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(cx + dx * rp.len * s, cy + dy * rp.len * s - lift, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (rp.fl) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.clock * 14);
+      ctx.textAlign = 'center';
+      ctx.font = `900 40px ${FONT}`;
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = INK;
+      ctx.strokeText('REVERSE!', cx, OY + 70);
+      ctx.fillStyle = `rgba(255,${Math.round(120 + 100 * pulse)},90,1)`;
+      ctx.fillText('REVERSE!', cx, OY + 70);
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- Lap Dash
+  drawTrack(ctx, frame, tr) {
+    const cx = OX + tr.cx;
+    const cy = OY + tr.cy;
+    ctx.save();
+    // the track surface: a wide soft band around the oval
+    ctx.strokeStyle = 'rgba(40,20,70,0.22)';
+    ctx.lineWidth = 168;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, tr.a, tr.b, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([22, 22]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, tr.a, tr.b, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // the start / finish line (a chequered strip across the track)
+    const st = tr.start;
+    for (let k = 0; k < 8; k++) {
+      const s0 = 0.64 + k * 0.1;
+      const p = { x: cx + Math.cos(st) * tr.a * s0, y: cy + Math.sin(st) * tr.b * s0 };
+      ctx.fillStyle = k % 2 ? '#ffffff' : '#2a1a3c';
+      ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
+    }
+
+    // the player's next gate glows
+    const me = frame.players.find((p) => p.id === frame.myId);
+    const next = me ? (me.gt || 0) % tr.gates.length : 0;
+    const pulse = 0.5 + 0.5 * Math.sin(this.clock * 7);
+    tr.gates.forEach((g, i) => {
+      const X = cx - tr.cx + g.x;
+      const Y = cy - tr.cy + g.y;
+      const isNext = i === next;
+      ctx.save();
+      ctx.translate(X, Y);
+      ctx.scale(1, 0.78);
+      ctx.lineWidth = isNext ? 9 : 5;
+      ctx.strokeStyle = isNext ? `rgba(255,242,122,${0.7 + 0.3 * pulse})` : 'rgba(255,255,255,0.35)';
+      ctx.setLineDash(isNext ? [] : [10, 10]);
+      ctx.beginPath();
+      ctx.arc(0, 0, tr.gateRadius * (isNext ? 0.8 + 0.1 * pulse : 0.75), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = isNext ? '#fff27a' : 'rgba(255,255,255,0.6)';
+      ctx.font = `900 ${isNext ? 28 : 20}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = INK;
+      ctx.strokeText(String(i + 1), X, Y + 8);
+      ctx.fillText(String(i + 1), X, Y + 8);
+    });
+
+    // hurdles: striped bars across the track
+    for (const h of tr.hurdles) {
+      const nx = -h.ty;
+      const ny = h.tx;
+      const X = cx - tr.cx + h.x;
+      const Y = cy - tr.cy + h.y;
+      const L = tr.hurdleHalfLen;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(20,5,40,0.3)';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(X - nx * L, Y - ny * L);
+      ctx.lineTo(X + nx * L, Y + ny * L);
+      ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 16;
+      ctx.beginPath();
+      ctx.moveTo(X - nx * L, Y - ny * L - 14);
+      ctx.lineTo(X + nx * L, Y + ny * L - 14);
+      ctx.stroke();
+      ctx.strokeStyle = '#ff595e';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(X - nx * L, Y - ny * L - 14);
+      ctx.lineTo(X + nx * L, Y + ny * L - 14);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 10;
+      ctx.setLineDash([14, 14]);
+      ctx.beginPath();
+      ctx.moveTo(X - nx * L, Y - ny * L - 14);
+      ctx.lineTo(X + nx * L, Y + ny * L - 14);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(X + nx * L * s, Y + ny * L * s - 14, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    // an arrow above you pointing at your next gate
+    if (me && me.st === 'alive') {
+      const g = tr.gates[next];
+      const ang = Math.atan2(g.y - me.y, g.x - me.x);
+      const d = Math.hypot(g.x - me.x, g.y - me.y);
+      if (d > 90) {
+        ctx.save();
+        ctx.translate(OX + me.x + Math.cos(ang) * 46, OY + me.y + Math.sin(ang) * 36 - 22);
+        ctx.rotate(ang);
+        ctx.fillStyle = '#fff27a';
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(14, 0);
+        ctx.lineTo(-8, -9);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-8, 9);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- Dig Dash
+  drawDigSpots(ctx, spots, arena) {
+    const R = (arena && arena.digRadius) || 38;
+    for (const [id, x, y] of spots) {
+      const X = OX + x;
+      const Y = OY + y;
+      const pulse = 0.5 + 0.5 * Math.sin(this.clock * 4 + id);
+      ctx.save();
+      ctx.translate(X, Y);
+      ctx.scale(1, 0.78);
+      ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.3 * pulse})`;
+      ctx.lineWidth = 4;
+      ctx.setLineDash([10, 9]);
+      ctx.lineDashOffset = -this.clock * 24;
+      ctx.beginPath();
+      ctx.arc(0, 0, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // a mound of loose dirt
+      ctx.fillStyle = 'rgba(110,70,40,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 24, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      // the X
+      ctx.lineCap = 'round';
+      for (const [w, col] of [[11, INK], [6, '#ffe2a8']]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(X - 14, Y - 12);
+        ctx.lineTo(X + 14, Y + 8);
+        ctx.moveTo(X + 14, Y - 12);
+        ctx.lineTo(X - 14, Y + 8);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // The progress ring under a digging player.
+  drawDigRing(ctx, p) {
+    const X = OX + p.x;
+    const Y = OY + p.y + 3;
+    ctx.save();
+    ctx.translate(X, Y);
+    ctx.scale(1, 0.4);
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = 'rgba(20,5,40,0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffe66d';
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.dp);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // --------------------------------------------------------------- Mole Stomp
+  drawMoles(ctx, moles, arena) {
+    const burrows = (arena && arena.burrows) || [];
+    const byBurrow = new Map(moles.map((m) => [m[1], m]));
+    burrows.forEach(([bx, by], i) => {
+      const X = OX + bx;
+      const Y = OY + by;
+      // the hole
+      ctx.fillStyle = '#2b1a14';
+      ctx.beginPath();
+      ctx.ellipse(X, Y + 6, 32, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#6b4630';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      const m = byBurrow.get(i);
+      if (!m) return;
+      const [, , state, kind, frac] = m;
+      const body = kind === 2 ? '#ffd23f' : kind === 1 ? '#c93a3a' : '#8a5a3a';
+      if (state === 0) {
+        // rumbling: a shaking mound, and a coloured warning ring so you know what is coming
+        const sx = Math.sin(this.clock * 60) * 3 * (0.4 + frac);
+        ctx.fillStyle = '#7a5236';
+        ctx.beginPath();
+        ctx.ellipse(X + sx, Y - 2, 24 + 6 * frac, 9 + 7 * frac, 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = kind === 1 ? '#ff5a5a' : kind === 2 ? '#ffd23f' : 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.ellipse(X, Y + 6, 40, 18, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        return;
+      }
+      // up: the mole rises, wobbles, then sinks back as its time runs out
+      const rise = frac < 0.12 ? frac / 0.12 : frac > 0.85 ? (1 - frac) / 0.15 : 1;
+      const wob = Math.sin(this.clock * 9 + i) * 2;
+      const top = Y + 6 - 44 * rise;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(X - 50, Y - 80, 100, 86); // hide the part below the floor line
+      ctx.clip();
+      ctx.fillStyle = body;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(X + wob, top + 22, 25, 30, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // snout, eyes, teeth
+      ctx.fillStyle = kind === 1 ? '#ffb3b3' : '#f2c9a4';
+      ctx.beginPath();
+      ctx.ellipse(X + wob, top + 26, 12, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#2a1a3c';
+      ctx.beginPath();
+      ctx.arc(X + wob, top + 22, 4, 0, Math.PI * 2);
+      ctx.fill();
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(X + wob + s * 11, top + 8, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = kind === 1 ? '#ff2d2d' : '#2a1a3c';
+        ctx.beginPath();
+        ctx.arc(X + wob + s * 11, top + 9, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (kind === 1) {
+        ctx.fillStyle = '#ffffff';
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(X + wob + s * 6, top + 32);
+          ctx.lineTo(X + wob + s * 10, top + 32);
+          ctx.lineTo(X + wob + s * 8, top + 40);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+      if (kind === 2) {
+        ctx.fillStyle = `rgba(255,242,122,${0.5 + 0.4 * Math.sin(this.clock * 10)})`;
+        ctx.beginPath();
+        ctx.arc(X + 22, Y - 36 * rise, 4, 0, Math.PI * 2);
+        ctx.arc(X - 24, Y - 20 * rise, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
   }
 
   // Meteor Mayhem: a red circle that fills up, then BAM.
@@ -2078,6 +2536,7 @@ export class Renderer {
       props.forEach((q, i) => items.push({ y: q[1], draw: () => this.drawProp(ctx, q[0], q[1], q[2], i === mineIdx) }));
     }
     items.sort((a, b) => a.y - b.y);
+    for (const p of bodies) if (p.dp > 0) this.drawDigRing(ctx, p);
     for (const it of items) it.draw();
     for (const p of ghosts) this.drawGhostPlayer(ctx, p, frame, dt);
 
@@ -2183,10 +2642,10 @@ export class Renderer {
       ctx.lineWidth = 7 * k + 2;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(0, 0, 44 + (1 - k) * 26, ang - 0.9, ang + 0.9);
+      ctx.arc(0, 0, 62 + (1 - k) * 42, ang - 0.9, ang + 0.9);
       ctx.stroke();
-      const gx = Math.cos(ang) * (30 + (1 - k) * 34);
-      const gy = Math.sin(ang) * (30 + (1 - k) * 34);
+      const gx = Math.cos(ang) * (40 + (1 - k) * 56);
+      const gy = Math.sin(ang) * (40 + (1 - k) * 56);
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = INK;
       ctx.lineWidth = 3;

@@ -68,7 +68,7 @@ test('the three newest minigames have descriptions, arena info and two variants 
     const a = Game.arena;
     assert.ok(a.maxTime > 0 && a.shoveCooldown > 0 && a.scoreLabel);
   }
-  assert.equal(Object.keys(games.GAMES).length, 7, 'seven minigames in total');
+  assert.equal(Object.keys(games.GAMES).length, 13, 'thirteen minigames in total');
 });
 
 test('fuzz: random rounds always finish with valid results (every new game and variant, 1-8 players)', () => {
@@ -762,8 +762,8 @@ test('Crown Chaos: solo practice works (the crown can be worn and overheats)', (
 
 test('the schedule now knows every new game and still never repeats one back-to-back', () => {
   for (let trial = 0; trial < 100; trial++) {
-    const sched = games.buildSchedule(7, seeded(trial + 31));
-    assert.equal(new Set(sched.map((s) => s.game)).size, 7, 'all seven games in a 7-round match');
+    const sched = games.buildSchedule(13, seeded(trial + 31));
+    assert.equal(new Set(sched.map((s) => s.game)).size, 13, 'all thirteen games in a 13-round match');
     for (let i = 1; i < sched.length; i++) assert.notEqual(sched[i].game, sched[i - 1].game);
   }
 });

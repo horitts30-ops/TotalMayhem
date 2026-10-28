@@ -9,7 +9,7 @@
 //     for that round) and is thrown away when the match ends. So nobody can bring
 //     a pile of coins from older matches to out-buy a newcomer, and nothing is
 //     ever bought with real money.
-//   * Each boost is small (10-30%), lasts for ONE round, and you can carry at most
+//   * Each boost is small (10-50%), lasts for ONE round, and you can carry at most
 //     two. Nobody can stack five.
 //   * Whoever is in last place pays 30% less (a comeback helper).
 //   * The SERVER keeps the purse and does the buying, so a modified browser
@@ -22,6 +22,8 @@ const POWERUPS = [
   { id: 'quick', icon: '⚡', name: 'Quick Hands', desc: 'Your shove recharges 30% faster.', price: 25, mods: { shoveCd: 0.7 } },
   { id: 'reach', icon: '\u{1F4CF}', name: 'Long Arms', desc: 'Your shove reaches 25% further.', price: 20, mods: { range: 1.25 } },
   { id: 'sturdy', icon: '\u{1F6E1}️', name: 'Sturdy Soles', desc: 'Shoves push you 35% less.', price: 20, mods: { sturdy: 0.65 } },
+  { id: 'lungs', icon: '\u{1FAC1}', name: 'Big Lungs', desc: 'Your stamina bar is 40% bigger (more jumps and shoves in a row).', price: 25, mods: { stamina: 1.4 } },
+  { id: 'wind', icon: '\u{1F4A8}', name: 'Second Wind', desc: 'Your stamina refills 50% faster.', price: 25, mods: { regen: 1.5 } },
 ];
 
 const BY_ID = new Map(POWERUPS.map((p) => [p.id, p]));
@@ -30,13 +32,15 @@ const MAX_SLOTS = 2; // most power-ups one player can carry into a round
 const UNDERDOG_DISCOUNT = 0.3; // last place pays this much less
 
 // The boosts every game understands, and how far a modified request may go.
-const NEUTRAL = { speed: 1, jump: 1, shoveCd: 1, range: 1, sturdy: 1 };
+const NEUTRAL = { speed: 1, jump: 1, shoveCd: 1, range: 1, sturdy: 1, stamina: 1, regen: 1 };
 const LIMITS = {
   speed: [0.6, 1.4],
   jump: [0.6, 1.4],
   shoveCd: [0.5, 1.5],
   range: [0.6, 1.5],
   sturdy: [0.4, 1.5],
+  stamina: [0.6, 1.6],
+  regen: [0.5, 1.8],
 };
 
 function getPowerup(id) {

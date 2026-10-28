@@ -57,7 +57,7 @@ const tap = (g, id, key) => {
 
 // -------------------------------------------------------------- catalogue
 test('power-ups: every boost is small, has a price, and is listed for the browser', () => {
-  assert.ok(powerups.POWERUPS.length >= 5);
+  assert.ok(powerups.POWERUPS.length >= 7);
   const ids = new Set();
   for (const p of powerups.POWERUPS) {
     assert.ok(!ids.has(p.id), 'unique ids');
@@ -66,7 +66,7 @@ test('power-ups: every boost is small, has a price, and is listed for the browse
     assert.ok(Number.isInteger(p.price) && p.price >= 10 && p.price <= 40);
     for (const [k, v] of Object.entries(p.mods)) {
       assert.ok(k in powerups.NEUTRAL, `known boost ${k}`);
-      assert.ok(v >= 0.6 && v <= 1.4, `${p.id}.${k} = ${v} stays modest (no more than 40% either way)`);
+      assert.ok(v >= 0.6 && v <= 1.5, `${p.id}.${k} = ${v} stays modest (no more than 50% either way)`);
     }
   }
   const list = powerups.catalogue();
@@ -344,16 +344,16 @@ test('effect: Quick Hands shorten the shove cooldown', () => {
 
 test('effect: Long Arms reach a rival that a normal shove would miss, Sturdy Soles reduce the push', () => {
   for (const Game of [GoldGrab, CrumbleFloor]) {
-    // reach: the target stands 95 pixels away (normal reach is 80)
+    // reach: the target stands 130 pixels away (normal reach is 115)
     let g = make(Game, 3, { p1: powerups.combine(['reach']) });
     place(g.players.get('p1'), 300, 288, 1, 0);
-    place(g.players.get('p2'), 395, 288);
+    place(g.players.get('p2'), 430, 288);
     place(g.players.get('p3'), 300, 100);
     tap(g, 'p1', 'shove');
     assert.equal(g.players.get('p2').hitsTaken, 1, `${Game.name}: long arms hit`);
     g = make(Game, 3, {});
     place(g.players.get('p1'), 300, 288, 1, 0);
-    place(g.players.get('p2'), 395, 288);
+    place(g.players.get('p2'), 430, 288);
     place(g.players.get('p3'), 300, 100);
     tap(g, 'p1', 'shove');
     assert.equal(g.players.get('p2').hitsTaken, 0, `${Game.name}: normal shove misses`);

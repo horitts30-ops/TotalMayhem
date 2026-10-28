@@ -506,7 +506,7 @@ test('a match can mix minigames: every game type runs over the network and score
 });
 
 test('each new minigame sends the snapshot fields the browser draws', async () => {
-  for (const [game, key] of [['goldGrab', 'cn'], ['hotPotato', 'bomb'], ['hillHustle', 'zone'], ['propHunt', 'props'], ['meteorMayhem', 'mt'], ['crownChaos', 'crown']]) {
+  for (const [game, key] of [['goldGrab', 'cn'], ['hotPotato', 'bomb'], ['hillHustle', 'zone'], ['propHunt', 'props'], ['meteorMayhem', 'mt'], ['crownChaos', 'crown'], ['paintPanic', 'pt'], ['colorCall', 'cc'], ['jumpRope', 'rp'], ['lapDash', 'ps'], ['digDash', 'ds'], ['moleStomp', 'mo']]) {
     await withServer({ SCHEDULE_OVERRIDE: [{ game, variant: 'classic' }] }, { timeScale: 8 }, async ({ mk }) => {
       const host = await mk();
       await ask(host, 'room:create', { name: 'Solo' });
@@ -707,5 +707,108 @@ test('smoothness: ping answers at once, and snapshots arrive steadily (no long g
     let worst = 0;
     for (let i = 1; i < times.length; i++) worst = Math.max(worst, times[i] - times[i - 1]);
     assert.ok(worst < 160, `no long hiccups between snapshots (worst gap ${worst} ms)`);
+  });
+});
+
+test('public rooms: private by default, only the host can list a room, the list shows no secrets', async () => {
+  await withServer({}, {}, async ({ mk }) => {
+    const host = await mk();
+    const guest = await mk();
+    const viewer = await mk();
+    const { code, token } = await ask(host, 'room:create', { name: 'Hosty' });
+    const joined = await ask(guest, 'room:join', { code, name: 'Guesty' });
+    await until(() => host.state && host.state.players.length === 2, 2000, 'two players');
+
+    assert.equal(host.state.isPublic, false, 'a new room is private');
+    let list = await ask(viewer, 'rooms:list', null);
+    assert.equal(list.ok, true);
+    assert.deepEqual(list.rooms, [], 'private rooms are never listed');
+
+    const denied = await ask(guest, 'room:public', true);
+    assert.equal(denied.ok, false, 'a guest cannot make the room public');
+    assert.equal((await ask(host, 'room:public', 'yes please')).isPublic, false, 'only a real true counts');
+
+    const on = await ask(host, 'room:public', true);
+    assert.deepEqual([on.ok, on.isPublic], [true, true]);
+    await until(() => guest.state.isPublic === true, 2000, 'everybody sees the room is public');
+    await sleep(2100); // (the list is rate limited: wait for a fresh window)
+    list = await ask(viewer, 'rooms:list');
+    assert.equal(list.rooms.length, 1);
+    const row = list.rooms[0];
+    assert.equal(row.code, code);
+    assert.equal(row.host, 'Hosty');
+    assert.equal(row.players, 2);
+    assert.equal(row.phase, 'lobby');
+    const text = JSON.stringify(list);
+    assert.ok(!text.includes(token) && !text.includes(joined.token) && !text.includes(joined.playerId), 'no tokens or ids in the list');
+
+    // The listed room can be joined with its code, like any other.
+    const joined2 = await ask(viewer, 'room:join', { code: row.code, name: 'Newbie' });
+    assert.equal(joined2.ok, true);
+
+    // Hiding it again removes it.
+    assert.equal((await ask(host, 'room:public', false)).isPublic, false);
+    await sleep(2100);
+    list = await ask(viewer, 'rooms:list', null);
+    assert.deepEqual(list.rooms, []);
+  });
+});
+
+test('public rooms: full rooms are not listed, the list is limited, and asking too fast is refused', async () => {
+  await withServer({ MAX_PLAYERS: 2 }, {}, async ({ mk }) => {
+    const a = await mk();
+    const b = await mk();
+    const watcher = await mk();
+    const { code } = await ask(a, 'room:create', { name: 'A' });
+    await ask(a, 'room:public', true);
+    assert.equal((await ask(watcher, 'rooms:list', null)).rooms.length, 1);
+    await ask(b, 'room:join', { code, name: 'B' });
+    const list = await ask(watcher, 'rooms:list', null);
+    assert.deepEqual(list.rooms, [], 'a full room cannot be joined, so it is not listed');
+    // Spamming the list: after a few asks in a short time the server says no.
+    let refused = 0;
+    for (let i = 0; i < 8; i++) if (!(await ask(watcher, 'rooms:list', null)).ok) refused++;
+    assert.ok(refused >= 3, `refused ${refused} fast requests`);
+  });
+});
+
+test('room size: the host picks 2-8 players, nobody else can, and the limit is enforced', async () => {
+  await withServer({}, {}, async ({ mk }) => {
+    const host = await mk();
+    const g1 = await mk();
+    const g2 = await mk();
+    const g3 = await mk();
+    const { code } = await ask(host, 'room:create', { name: 'Hosty' });
+    await until(() => host.state && host.state.maxPlayers === 8, 2000, 'default is the server maximum');
+    assert.equal(host.state.playerCap, 8);
+    await ask(g1, 'room:join', { code, name: 'G1' });
+    await until(() => host.state.players.length === 2, 2000, 'two players');
+
+    assert.equal((await ask(g1, 'room:max', 3)).ok, false, 'a guest cannot change it');
+    for (const bad of [1, 0, 9, 100, -4, 'lots', null]) assert.equal((await ask(host, 'room:max', bad)).ok, false, `rejects ${bad}`);
+    assert.equal(host.state.maxPlayers, 8, 'bad values change nothing');
+
+    assert.deepEqual(Object.values(await ask(host, 'room:max', 3)).slice(0, 2), [true, 3]);
+    await until(() => g1.state.maxPlayers === 3, 2000, 'everybody sees the new size');
+    assert.equal((await ask(host, 'room:max', 1)).ok, false);
+    await ask(g2, 'room:join', { code, name: 'G2' });
+    const full = await ask(g3, 'room:join', { code, name: 'G3' });
+    assert.equal(full.ok, false);
+    assert.match(full.error, /full \(3 players max\)/);
+    assert.equal((await ask(host, 'room:max', 2)).ok, false, 'cannot go below the players already inside');
+    assert.equal((await ask(host, 'room:max', 5)).ok, true);
+    assert.equal((await ask(g3, 'room:join', { code, name: 'G3' })).ok, true, 'room again has space');
+
+    // the public list shows the chosen size
+    await ask(host, 'room:public', true);
+    const watcher = await mk();
+    const list = await ask(watcher, 'rooms:list', null);
+    assert.equal(list.rooms[0].max, 5);
+    assert.equal(list.rooms[0].players, 4);
+
+    // it cannot be changed in the middle of a match
+    await ask(host, 'room:rounds', 1);
+    assert.equal((await ask(host, 'match:start', null)).ok, true);
+    assert.equal((await ask(host, 'room:max', 6)).ok, false);
   });
 });

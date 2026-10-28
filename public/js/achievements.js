@@ -18,7 +18,10 @@ import { grant, ownedCount } from './shop.js';
 
 export const TROPHY_KEY = 'tm_trophies';
 
-const ALL_GAMES = ['crumbleFloor', 'goldGrab', 'hotPotato', 'hillHustle', 'propHunt', 'meteorMayhem', 'crownChaos'];
+const ALL_GAMES = [
+  'crumbleFloor', 'goldGrab', 'hotPotato', 'hillHustle', 'propHunt', 'meteorMayhem', 'crownChaos',
+  'paintPanic', 'colorCall', 'jumpRope', 'lapDash', 'digDash', 'moleStomp',
+];
 
 // `value(stats)` says how far along you are, `goal` is what finishes it.
 // `reward` is an optional special cosmetic: { kind: 'hat' | 'skin', index }.
@@ -42,6 +45,12 @@ export const ACHIEVEMENTS = [
   { id: 'win_prop', icon: '\u{1F4E6}', name: 'Master of Disguise', desc: 'Win a Prop Hunt round.', goal: 1, value: won('propHunt'), reward: { kind: 'hat', index: 20 } },
   { id: 'win_meteor', icon: '☄️', name: 'Sky Dancer', desc: 'Win a Meteor Mayhem round.', goal: 1, value: won('meteorMayhem') },
   { id: 'win_crown', icon: '\u{1F48E}', name: 'Crown Jewel', desc: 'Win a Crown Chaos round.', goal: 1, value: won('crownChaos') },
+  { id: 'win_paint', icon: '\u{1F3A8}', name: 'Picasso', desc: 'Win a Paint Panic round.', goal: 1, value: won('paintPanic') },
+  { id: 'win_color', icon: '\u{1F308}', name: 'True Colors', desc: 'Win a Color Call round.', goal: 1, value: won('colorCall') },
+  { id: 'win_rope', icon: '\u{1FAA2}', name: 'Rope Master', desc: 'Win a Jump Rope Jam round.', goal: 1, value: won('jumpRope') },
+  { id: 'win_lap', icon: '\u{1F3C1}', name: 'Pole Position', desc: 'Win a Lap Dash round.', goal: 1, value: won('lapDash') },
+  { id: 'win_dig', icon: '\u{1F3F4}\u200D☠️', name: 'Treasure Hunter', desc: 'Win a Dig Dash round.', goal: 1, value: won('digDash') },
+  { id: 'win_mole', icon: '\u{1F439}', name: 'Whack Master', desc: 'Win a Mole Stomp round.', goal: 1, value: won('moleStomp') },
   { id: 'untouchable', icon: '\u{1F6F8}', name: 'Untouchable', desc: 'Earn the "Untouchable" title in Meteor Mayhem.', goal: 1, value: (s) => s.untouchable, reward: { kind: 'hat', index: 19 } },
   { id: 'jack', icon: '\u{1F0CF}', name: 'Jack of All Trades', desc: 'Win a round of every minigame.', goal: ALL_GAMES.length, value: (s) => Object.keys(s.wonGames).length, reward: { kind: 'skin', index: 10 } },
   { id: 'clown', icon: '\u{1F921}', name: 'Class Clown', desc: 'Earn 10 funny round titles.', goal: 10, value: (s) => s.titles, reward: { kind: 'hat', index: 21 } },

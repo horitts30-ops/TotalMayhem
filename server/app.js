@@ -179,6 +179,35 @@ function createGameServer(options = {}) {
       if (room) room.setReady(player.id, data === true || (data && data.ready === true));
     });
 
+    on('room:public', (on_, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setPublic(player.id, on_ === true);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, isPublic: room.isPublic });
+    });
+
+    // The home page asks for the list of public rooms. Limited to a few asks
+    // per second so nobody can hammer the server with it.
+    let listWindow = 0;
+    let listCount = 0;
+    on('rooms:list', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const now = Date.now();
+      if (now - listWindow >= 2000) {
+        listWindow = now;
+        listCount = 0;
+      }
+      if (++listCount > 4) return cb({ ok: false, error: 'Slow down a little.' });
+      cb({ ok: true, rooms: manager.listPublic() });
+    });
+
+    on('room:max', (n, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setMaxPlayers(player.id, n);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, maxPlayers: room.maxPlayers });
+    });
+
     on('room:rounds', (n, cb) => {
       const { room, player } = lookup();
       if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });

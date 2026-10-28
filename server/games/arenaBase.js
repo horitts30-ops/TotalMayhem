@@ -28,6 +28,7 @@
 
 const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
+const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
 
 // ----- Arena (same size and shape as Crumble Floor, so the client can reuse it)
 const TILE = 64;
@@ -47,8 +48,8 @@ const TUNING = {
   jumpBuffer: 0.14,
   knockFriction: 4.5,
 
-  shoveCooldown: 1.4,
-  shoveRange: 80,
+  shoveCooldown: 0.7, // short: STAMINA is what really limits how often you can shove
+  shoveRange: 115, // a big, generous reach (was 80)
   shoveConeDot: 0.25,
   shoveSpeed: 540,
   shoveRecoil: 90,
@@ -152,6 +153,7 @@ class ArenaGame {
         hitsTaken: 0,
         hitsDealt: 0,
       });
+      initStamina(this.players.get(info.id));
     });
   }
 
@@ -188,6 +190,13 @@ class ArenaGame {
   }
   _canJump(p) {
     return true;
+  }
+  // Stamina prices (0 = this action is free for this player right now).
+  _jumpCost(p) {
+    return STAMINA.jumpCost;
+  }
+  _shoveCost(p) {
+    return STAMINA.shoveCost;
   }
   _solid(p) {
     return true; // false = other players pass straight through this one
@@ -260,11 +269,23 @@ class ArenaGame {
     if (this.time >= this.maxTime || this._livePlayers().length === 0) this._finish();
   }
 
+  // What the browser needs to PREDICT its own player's steering (it only draws a guess; the
+  // server stays in charge): top speed (0 = input does nothing right now) and ground grip.
+  _moveInfo(p) {
+    const live = this.time >= 0 && !this.finished;
+    const steer = p.state === 'alive' && live && p.stun <= 0 && this._canMove(p);
+    return {
+      ms: steer ? Math.round(TUNING.speed * (this.v.speed || 1) * p.speedMul * p.mods.speed) : 0,
+      ma: r1(TUNING.groundAccel * (this.v.grip || 1)),
+    };
+  }
+
   _stepPlayer(p, dt, live) {
     p.shoveCd = Math.max(0, p.shoveCd - dt);
     p.shoveAnim = Math.max(0, p.shoveAnim - dt);
     p.immune = Math.max(0, p.immune - dt);
     p.stun = Math.max(0, p.stun - dt);
+    tickStamina(p, dt);
 
     const grounded = p.z <= 0;
     const stunned = p.stun > 0;
@@ -292,11 +313,16 @@ class ArenaGame {
       if (!this._canJump(p)) {
         p.jumpBuf = 0;
       } else if (grounded) {
-        p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
-        p.z = 0.01;
-        p.jumpBuf = 0;
-        p.jumps++;
-        this.events.push({ k: 'jump', id: p.id, x: r1(p.x), y: r1(p.y) });
+        if (spendStamina(p, this._jumpCost(p))) {
+          p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
+          p.z = 0.01;
+          p.jumpBuf = 0;
+          p.jumps++;
+          this.events.push({ k: 'jump', id: p.id, x: r1(p.x), y: r1(p.y) });
+        } else {
+          this._tired(p);
+          p.jumpBuf = Math.max(0, p.jumpBuf - dt); // keep trying for a moment: stamina may come back
+        }
       } else {
         p.jumpBuf = Math.max(0, p.jumpBuf - dt);
       }
@@ -307,8 +333,13 @@ class ArenaGame {
     // shove
     if (live && p.shoveBuf > 0) {
       if (p.shoveCd <= 0) {
-        this._doShove(p);
-        p.shoveBuf = 0;
+        if (spendStamina(p, this._shoveCost(p))) {
+          this._doShove(p);
+          p.shoveBuf = 0;
+        } else {
+          this._tired(p);
+          p.shoveBuf = Math.max(0, p.shoveBuf - dt);
+        }
       } else {
         p.shoveBuf = Math.max(0, p.shoveBuf - dt);
       }
@@ -343,6 +374,13 @@ class ArenaGame {
         this.events.push({ k: 'land', id: p.id, x: r1(p.x), y: r1(p.y) });
       }
     }
+  }
+
+  // "Too tired!" - tells that player's browser to flash the stamina bar.
+  _tired(p) {
+    if (p.tiredCd > 0) return;
+    p.tiredCd = STAMINA.tiredEventGap;
+    this.events.push({ k: 'tired', id: p.id, x: r1(p.x), y: r1(p.y) });
   }
 
   _doShove(p) {
@@ -522,6 +560,9 @@ class ArenaGame {
         sn: p.stun > 0 ? 1 : 0,
         sl: 0,
         cd: r2(p.shoveCd),
+        sp: r1(p.stamina),
+        sm: Math.round(p.staminaMax),
+        ...this._moveInfo(p),
         rs: this._scoreOf(p),
         ...(winners && winners.get(p.id) === 1 && !p.abandoned ? { md: 'happy' } : {}),
         ...this._playerSnapshot(p, viewerId),
@@ -558,6 +599,8 @@ class ArenaGame {
       height: WORLD_H,
       maxTime,
       shoveCooldown: TUNING.shoveCooldown,
+      jumpCost: STAMINA.jumpCost,
+      shoveCost: STAMINA.shoveCost,
       gooCooldown: 1,
       scoreLabel: '',
       scoreDir: 'high',

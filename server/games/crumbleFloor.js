@@ -22,6 +22,7 @@
 
 const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
+const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
 
 // ----- Arena ---------------------------------------------------------------
 const TILE = 64;
@@ -49,8 +50,8 @@ const TUNING = {
   holeGrace: 0.09, // walking off an edge: tiny delay before falling
   knockFriction: 4.5,
 
-  shoveCooldown: 1.4,
-  shoveRange: 80,
+  shoveCooldown: 0.7, // short: STAMINA is what really limits how often you can shove
+  shoveRange: 115, // a big, generous reach (was 80)
   shoveConeDot: 0.25, // roughly +-75 degrees in front of you
   shoveSpeed: 540,
   shoveRecoil: 90,
@@ -263,6 +264,7 @@ class CrumbleFloor {
         hitsTaken: 0,
         puddleHits: 0,
       });
+      initStamina(this.players.get(info.id));
     });
   }
 
@@ -291,6 +293,8 @@ class CrumbleFloor {
       maxTime: TUNING.maxTime,
       // Sent so the HUD can draw cooldown bars without hard-coding the numbers.
       shoveCooldown: TUNING.shoveCooldown,
+      jumpCost: STAMINA.jumpCost,
+      shoveCost: STAMINA.shoveCost,
       gooCooldown: TUNING.puddleCooldown,
     };
   }
@@ -406,6 +410,7 @@ class CrumbleFloor {
   _updatePlayer(p, dt) {
     p.shoveCd = Math.max(0, p.shoveCd - dt);
     p.shoveAnim = Math.max(0, p.shoveAnim - dt);
+    tickStamina(p, dt);
     p.stun = Math.max(0, p.stun - dt);
     p.immune = Math.max(0, p.immune - dt);
     p.slow = Math.max(0, p.slow - dt);
@@ -448,13 +453,18 @@ class CrumbleFloor {
 
     if (p.jumpBuf > 0) {
       if (grounded || p.coyote > 0) {
-        p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
-        p.z = 0.01;
-        p.coyote = 0;
-        p.jumpBuf = 0;
-        p.holeT = 0;
-        p.jumps++;
-        this.events.push({ k: 'jump', id: p.id, x: r1(p.x), y: r1(p.y) });
+        if (spendStamina(p, STAMINA.jumpCost)) {
+          p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
+          p.z = 0.01;
+          p.coyote = 0;
+          p.jumpBuf = 0;
+          p.holeT = 0;
+          p.jumps++;
+          this.events.push({ k: 'jump', id: p.id, x: r1(p.x), y: r1(p.y) });
+        } else {
+          this._tired(p);
+          p.jumpBuf = Math.max(0, p.jumpBuf - dt);
+        }
       } else {
         p.jumpBuf = Math.max(0, p.jumpBuf - dt);
       }
@@ -463,8 +473,13 @@ class CrumbleFloor {
     // --- Shove ------------------------------------------------------------
     if (p.shoveBuf > 0) {
       if (this.time >= 0 && p.shoveCd <= 0) {
-        this._doShove(p);
-        p.shoveBuf = 0;
+        if (spendStamina(p, STAMINA.shoveCost)) {
+          this._doShove(p);
+          p.shoveBuf = 0;
+        } else {
+          if (this.time >= 0) this._tired(p);
+          p.shoveBuf = Math.max(0, p.shoveBuf - dt);
+        }
       } else {
         p.shoveBuf = Math.max(0, p.shoveBuf - dt);
       }
@@ -490,6 +505,12 @@ class CrumbleFloor {
         this.events.push({ k: 'land', id: p.id, x: r1(p.x), y: r1(p.y) });
       }
     }
+  }
+
+  _tired(p) {
+    if (p.tiredCd > 0) return;
+    p.tiredCd = STAMINA.tiredEventGap;
+    this.events.push({ k: 'tired', id: p.id, x: r1(p.x), y: r1(p.y) });
   }
 
   _doShove(p) {
@@ -814,6 +835,10 @@ class CrumbleFloor {
         sn: p.stun > 0 ? 1 : 0,
         sl: p.slow > 0 ? 1 : 0,
         cd: r2(p.shoveCd),
+        sp: r1(p.stamina),
+        sm: Math.round(p.staminaMax),
+        ms: p.state === 'alive' && this.time >= 0 && !this.finished && p.stun <= 0 ? Math.round(TUNING.speed * (p.slow > 0 ? TUNING.slowFactor : 1) * p.mods.speed) : 0,
+        ma: r1(TUNING.groundAccel * this.v.grip),
         pc: r2(p.puddleCd),
         am: p.puddleAmmo,
       });

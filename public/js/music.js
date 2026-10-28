@@ -114,6 +114,42 @@ export const STYLES = {
     leadWave: 'square', lead: ['x..x..x.x.x.x...', 'xx.x..x.x...x.x.'], rest: 0.1,
     mix: { bass: 0.22, pad: 0.05, arp: 0.04, lead: 0.06, drums: 1 },
   },
+  paintPanic: {
+    bpm: 132, root: 62, mode: 'maj', prog: [0, 4, 5, 3], seed: 131, vol: 0.9, swing: 0.08,
+    bass: 'offbeat', drums: DRUMS.four, pad: false, arp: 'up', arpRate: 2, arpWave: 'triangle', arpOct: 1,
+    leadWave: 'square', lead: ['x.x..x.x..x.x...', 'x..x.x.x.x..x.x.'], rest: 0.12,
+    mix: { bass: 0.2, pad: 0.05, arp: 0.04, lead: 0.055, drums: 0.95 },
+  },
+  colorCall: {
+    bpm: 118, root: 60, mode: 'dor', prog: [0, 3, 4, 0], seed: 137, vol: 0.85, swing: 0,
+    bass: 'pulse', drums: DRUMS.tick, pad: true, arp: 'updown', arpRate: 1, arpWave: 'sine', arpOct: 1,
+    leadWave: 'triangle', lead: ['x...x...x.x.....', 'x.x...x...x...x.'], rest: 0.25,
+    mix: { bass: 0.2, pad: 0.06, arp: 0.05, lead: 0.07, drums: 0.85 },
+  },
+  jumpRope: {
+    bpm: 144, root: 57, mode: 'min', prog: [0, 0, 3, 4], seed: 149, vol: 0.9, swing: 0.15,
+    bass: 'walk', drums: DRUMS.stomp, pad: false, arp: 'up', arpRate: 2, arpWave: 'square', arpOct: 1,
+    leadWave: 'square', lead: ['x..x..x.x..x..x.', 'x.x.x..x..x.x...'], rest: 0.1,
+    mix: { bass: 0.22, pad: 0.05, arp: 0.03, lead: 0.05, drums: 1 },
+  },
+  lapDash: {
+    bpm: 150, root: 59, mode: 'maj', prog: [0, 5, 3, 4], seed: 151, vol: 0.9, swing: 0,
+    bass: 'eighths', drums: DRUMS.four, pad: false, arp: 'updown', arpRate: 2, arpWave: 'square', arpOct: 1,
+    leadWave: 'square', lead: ['x.x.x.x.x.xx.x..', 'x.xx.x.x.x.x.xx.'], rest: 0.08,
+    mix: { bass: 0.22, pad: 0.05, arp: 0.035, lead: 0.05, drums: 1 },
+  },
+  digDash: {
+    bpm: 104, root: 55, mode: 'dor', prog: [0, 0, 5, 4], seed: 157, vol: 0.85, swing: 0.2,
+    bass: 'walk', drums: DRUMS.shuffle, pad: true, arp: 'up', arpRate: 2, arpWave: 'triangle', arpOct: 1,
+    leadWave: 'triangle', lead: ['x..x....x.x.....', '..x..x..x.......'], rest: 0.3,
+    mix: { bass: 0.22, pad: 0.06, arp: 0.045, lead: 0.07, drums: 0.8 },
+  },
+  moleStomp: {
+    bpm: 138, root: 64, mode: 'maj', prog: [0, 2, 3, 4], seed: 163, vol: 0.9, swing: 0.12,
+    bass: 'offbeat', drums: DRUMS.half, pad: false, arp: 'updown', arpRate: 2, arpWave: 'triangle', arpOct: 1,
+    leadWave: 'square', lead: ['x.x..x..x.x..x..', 'x..x.xx.x...x.x.'], rest: 0.14,
+    mix: { bass: 0.2, pad: 0.05, arp: 0.045, lead: 0.055, drums: 0.9 },
+  },
   pitstop: {
     bpm: 96, root: 65, mode: 'maj', prog: [1, 4, 0, 0], seed: 107, vol: 0.85, swing: 0.28,
     bass: 'walk', drums: DRUMS.shuffle, pad: true, arp: 'none', arpRate: 2, arpWave: 'triangle',

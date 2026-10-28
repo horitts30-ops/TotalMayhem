@@ -20,6 +20,12 @@ const HillHustle = require('./hillHustle');
 const PropHunt = require('./propHunt');
 const MeteorMayhem = require('./meteorMayhem');
 const CrownChaos = require('./crownChaos');
+const PaintPanic = require('./paintPanic');
+const ColorCall = require('./colorCall');
+const JumpRope = require('./jumpRope');
+const LapDash = require('./lapDash');
+const DigDash = require('./digDash');
+const MoleStomp = require('./moleStomp');
 
 const GAMES = {
   crumbleFloor: CrumbleFloor,
@@ -29,6 +35,12 @@ const GAMES = {
   propHunt: PropHunt,
   meteorMayhem: MeteorMayhem,
   crownChaos: CrownChaos,
+  paintPanic: PaintPanic,
+  colorCall: ColorCall,
+  jumpRope: JumpRope,
+  lapDash: LapDash,
+  digDash: DigDash,
+  moleStomp: MoleStomp,
 };
 
 // A "slot" says which game to run and which variant (twist) of it, for example
@@ -89,8 +101,10 @@ function createGame(slot, participants, options) {
   return new Game(participants, slot.variant, options);
 }
 
+// Most games have one fixed arena; a few (Lap Dash: the hurdles) depend on the variant.
 function arenaFor(slot) {
-  return GAMES[slot.game].arena;
+  const Game = GAMES[slot.game];
+  return typeof Game.arenaFor === 'function' ? Game.arenaFor(slot.variant) : Game.arena;
 }
 
 module.exports = { GAMES, SCHEDULE_POOL, buildSchedule, describeSlot, createGame, arenaFor };

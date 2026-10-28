@@ -507,3 +507,37 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #fff;
   background: rgba(0,0,0,0.62); padding: 6px 9px; border-radius: 8px; white-space: pre;
 }
+
+/* Public rooms */
+.public-box { margin-top: 12px; border-top: 3px dashed rgba(42,26,60,0.18); padding-top: 10px; }
+.public-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 900; }
+.public-list { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding-right: 2px; }
+.public-empty { opacity: 0.65; font-weight: 700; font-size: 0.92rem; padding: 6px 2px; }
+.public-row {
+  display: grid; grid-template-columns: 1fr auto auto auto auto; align-items: center; gap: 10px;
+  background: #fff; border: 3px solid var(--ink); border-radius: 12px; padding: 7px 12px;
+  font: inherit; font-weight: 800; color: var(--ink); cursor: pointer; text-align: left;
+  box-shadow: 0 3px 0 rgba(42,26,60,0.35);
+}
+.public-row:hover { background: #fff6d6; transform: translateY(-1px); }
+.public-row .pr-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.public-row .pr-code { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; opacity: 0.7; }
+.public-row .pr-state { font-size: 0.85rem; opacity: 0.8; }
+.public-row .pr-state.live { color: #b34700; }
+.public-row .pr-join { background: #5fe08a; border: 2px solid var(--ink); border-radius: 9px; padding: 2px 12px; }
+.inline-field.check { cursor: pointer; }
+.inline-field.check input { width: 20px; height: 20px; accent-color: #5fe08a; }
+@media (max-width: 560px) {
+  .public-row { grid-template-columns: 1fr auto auto; }
+  .public-row .pr-code, .public-row .pr-state { display: none; }
+}
+
+/* Stamina bar (jump and shove share it) */
+.ability.stamina { padding: 2px 10px 2px 8px; }
+.stamina .st-icon { font-size: 0.95rem; }
+.stamina .st-bar { position: relative; width: 120px; height: 14px; background: rgba(42,26,60,0.2); border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; }
+.stamina .st-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(#ffe66d, #ffb703); transform-origin: left; transition: background 0.15s; }
+.stamina .st-bar b { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(42,26,60,0.7); }
+.stamina.low .st-bar i { background: linear-gradient(#ff9a8b, #ff5a4d); }
+.stamina.tired { animation: tired-shake 0.28s linear; }
+@keyframes tired-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }

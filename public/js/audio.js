@@ -193,6 +193,20 @@ export const sfx = {
   zone() {
     tone(220, 0.3, { type: 'sine', vol: 0.07, to: 440 });
   },
+  gate() {
+    if (!throttle('gate', 60)) return;
+    tone(740, 0.06, { type: 'triangle', vol: 0.05 });
+    tone(990, 0.09, { type: 'triangle', vol: 0.05, delay: 0.05 });
+  },
+  rumble() {
+    if (!throttle('rumble', 120)) return;
+    noise(0.22, { vol: 0.07, freq: 180, q: 0.8 });
+  },
+  stomp(v = 1) {
+    noise(0.1, { vol: 0.12 * v, freq: 260 });
+    tone(220, 0.1, { type: 'square', vol: 0.07 * v, to: 90 });
+    tone(880, 0.1, { type: 'triangle', vol: 0.06 * v, delay: 0.06 });
+  },
   lose() {
     tone(330, 0.2, { type: 'triangle', vol: 0.07 });
     tone(262, 0.3, { type: 'triangle', vol: 0.07, delay: 0.18 });

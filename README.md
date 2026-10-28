@@ -1,12 +1,14 @@
-# TOTAL MAYHEM  (seven minigames, a coin shop, power-ups, achievements and music)
+# TOTAL MAYHEM  (13 minigames, stamina, public rooms, a coin shop, power-ups, achievements and music)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
-silly minigames. **This version has seven minigames: "Crumble Floor" (on seven
-different floors), "Gold Grab", "Hot Potato", "Hill Hustle", "Prop Hunt", "Meteor Mayhem"
-and "Crown Chaos".** A match mixes them. Finishing rounds earns **coins** that you spend in
+silly minigames. **This version has 13 minigames: "Crumble Floor" (on seven
+different floors), "Gold Grab", "Hot Potato", "Hill Hustle", "Prop Hunt", "Meteor Mayhem",
+"Crown Chaos", and the new "Paint Panic", "Color Call", "Jump Rope Jam", "Lap Dash", "Dig Dash"
+and "Mole Stomp".** A match mixes them. Jump and shove now share one **stamina bar**, and a host can
+make a room **public** so anybody can join it from a list on the home page. Finishing rounds earns **coins** that you spend in
 the **Shop** on hats, skins and colors (cosmetics only), you can buy small one-round
-**power-ups** at a **pit stop** between rounds, and **26 achievements** unlock special hats and
+**power-ups** at a **pit stop** between rounds, and **32 achievements** unlock special hats and
 skins that coins cannot buy (all explained in section 3).
 
 ---
@@ -42,6 +44,7 @@ Stop the server with `Ctrl+C` in the terminal.
 | Shove (also: pass the bomb in Hot Potato; drop goo as a Crumble Floor ghost; **disguise / undisguise** as a Prop Hunt hider; **smack** as the Prop Hunt seeker) | `E` or `Shift` |
 | Music on / off | `N` (or the music button in the bottom-right corner) |
 | Mute / unmute all sound | `M` |
+| Show the FPS / ping panel | `F3` |
 
 At the **pit stop** between rounds you use the mouse: click a power-up card to buy it, click it
 again to get your coins back, then click **I'm ready**.
@@ -62,7 +65,8 @@ down by finishing order (with 8 players: 10, 9, 8, 6, 5, 4, 3, 1). Players who t
 place. Anybody who leaves mid-round gets 0 for that round.
 
 **Rules that apply everywhere (fairness):**
-* Shove has a 1.4 second cooldown and a short range in front of you. Whoever you hit is dizzy
+* Shove has a short 0.7 second cooldown, a generous reach in front of you (115 px, about 1.8 tiles) and
+  costs **stamina** (next section). Whoever you hit is dizzy
   for a moment and **cannot be shoved again for 1 second**, so nobody gets bullied repeatedly.
 * **Nobody is knocked out of the match.** In Crumble Floor you become a goo-dropping ghost;
   in the other games everybody plays the full round.
@@ -172,11 +176,71 @@ At the end of every round, the results screen hands out silly titles such as
 "Gravity's Favorite", "Coin Goblin", "Human Firework", "King of the Hill", "Master of
 Disguise" or "Untouchable".
 
+### Stamina (jump and shove share it)
+
+You have one **stamina bar** (bottom of the screen, next to the Jump and Shove buttons). A **jump costs 25**
+and a **shove costs 35** out of a bar of **100**, so you can do about four jumps, or two shoves and a jump,
+before you are out. It starts refilling **0.45 seconds** after you last used it, at 20 per second.
+Two small marks on the bar show where a jump and a shove would end up.
+
+* Too tired? The bar shakes, you hear a little "puff", and the move simply does not happen. A jump or shove
+  you press just a moment early is remembered and happens as soon as you have enough.
+* **Big Lungs** (bigger bar) and **Second Wind** (faster refill) are new power-ups for the pit stop.
+* Hiders in Prop Hunt shove for free (their shove is how they disguise), and nobody pays during the hide phase.
+* The numbers are in `server/stamina.js`.
+
+### Room size (2 to 8 players)
+
+In the lobby the host picks **Players: up to 2 ... up to 8** (the default is 8). The room refuses newcomers once it is
+full, the public list shows the chosen size, you cannot set it lower than the number of players already inside,
+and it cannot be changed during a match. The overall limit is `MAX_PLAYERS` in `server/config.js`
+(the game was only tested with up to 8).
+
+### Public rooms
+
+In the lobby the host can tick **Public room**. The room then appears in the **Public rooms** box on the home
+page of everybody else, with the host's name, how many players are in, and whether it is in the lobby or playing.
+Click a row to join it. Untick it to make the room private again. Rooms are private by default.
+
+* The list refreshes every 5 seconds (or press the refresh button) and only shows rooms with space.
+* It shows the 4-letter code but never anything secret (no player ids or reconnect tokens).
+* Asking for the list is rate-limited per connection so nobody can hammer the server with it.
+* Anyone who has the code can still join a private room, as before. Public simply means "listed".
+
+### The six newest minigames
+
+**Paint Panic (Territory) - 60 seconds.** Every tile you walk over turns your colour. Most tiles wins. Jump to
+travel without painting; **shove** somebody and up to 3 tiles around them flip to you. Far behind (8 tiles)? You get a wide brush that paints two
+tiles at once. Versions: *Paint Panic* and *Sugar Rush* (faster feet).
+
+**Color Call (Party) - 60 seconds.** The floor shows four coloured zones. A colour is called, a timer counts down, and you
+must be standing in it when the time runs out, or you get splatted (dizzy, no point; nobody is out). Calls get
+faster as the round goes. A last-second shove can push a rival out. Versions: *Color Call* and *Anything But*
+(two zones are lava and the other two are safe).
+
+**Jump Rope Jam (Dodging) - 60 seconds.** A giant rope spins around the middle of the floor and gets faster. **Be in the air when it passes** to
+score a point; it hits both ends of the rope. If you are on the ground it tangles you (stun and a knock, no point).
+The hub in the middle is safe. A jump that fails for lack of stamina means you get caught. Versions: *Jump Rope Jam* and *Wild Rope*
+(it reverses direction every 11 seconds, with a warning first).
+
+**Lap Dash (Racing) - 60 seconds.** An oval track with six numbered gates. Run through them **in order** to score; the most gates wins
+(a lap is 6). Hurdles trip you unless you jump them (or run around). Anyone far behind the leader runs a little faster (a rubber band). Versions:
+*Lap Dash* (three hurdles) and *Hurdle Gauntlet* (every gap has one).
+
+**Dig Dash (Treasure hunt) - 60 seconds.** Big X marks appear. **Stand still on one** for about 1.2 seconds to dig it up. It holds treasure worth 1 to 5
+points, or a **bomb** that costs the digger 2 points and blasts everybody close by. **What is buried is secret**: the server never sends it, so
+nobody can peek. Two diggers on the same X: the first to finish gets it. A shove fills the hole back in. Versions: *Dig Dash* and *Bomb Squad*
+(many more bombs, faster digging).
+
+**Mole Stomp (Whack-a-mole) - 60 seconds.** Moles pop out of nine burrows. A mound **rumbles** first, then the mole rises: **jump on it** to
+score (+1). **Red** moles bite (lose 2 points, dizzy), and a **gold** mole is worth +3 and appears near whoever is losing. Walking over a mole does
+nothing, you have to land on it. Versions: *Mole Stomp* and *Mole Frenzy* (more moles, faster).
+
 ### Music
 
 There is background music, and **it is made entirely by code** (no audio files, no downloads, no
 licensing): the browser plays every note live, the same way as the sound effects. Each part of the
-game has its own little tune: the title screen and lobby, the intro card, each of the seven minigames
+game has its own little tune: the title screen and lobby, the intro card, each of the 13 minigames
 (each in its own key, tempo and mood, e.g. a sneaky low one for Prop Hunt and a frantic one for Hot
 Potato), the pit stop, the results and the final scoreboard. The music fades between scenes and goes
 quiet during the 3-2-1 countdown so you can hear the ticks.
@@ -202,6 +266,8 @@ away or disconnected never hold it up.
 | Quick Hands | shove recharges 30% faster | 25 |
 | Long Arms | shove reaches 25% further | 20 |
 | Sturdy Soles | shoves push you 35% less | 20 |
+| Big Lungs | stamina bar 40% bigger | 25 |
+| Second Wind | stamina refills 50% faster | 25 |
 
 **Why this is not "pay to win" (the original brief says no pay-to-win):**
 * They are bought with a separate **pit-stop purse**, not your shop coins. Everybody's purse starts
@@ -217,9 +283,9 @@ away or disconnected never hold it up.
 
 ### Achievements and trophy hats (cosmetics only)
 
-Click **Trophies** on the title screen, in the lobby or on the final scoreboard to see all 26
+Click **Trophies** on the title screen, in the lobby or on the final scoreboard to see all 32
 achievements with progress bars. A pop-up appears when you unlock one. Examples: win a round,
-win a match, win each of the seven minigames, jump 100 times, earn 10 silly titles, knock out 3
+win a match, win each of the 13 minigames, jump 100 times, earn 10 silly titles, knock out 3
 players in one Crumble Floor round, earn 500 coins in total.
 
 Ten of them give a **special hat or skin that coins cannot buy**: Laurel wreath, Golden trophy,
@@ -256,6 +322,25 @@ If the game felt choppy, these are the fixes (the measurements are in section 9)
 * Other players are drawn a short moment in the past so they glide; that delay now **adapts**
   (about 55-160 ms) to how steady your connection is.
 * **F3** shows an FPS / ping / snapshots-per-second panel so you can tell which kind of lag you have.
+
+### Less input lag: movement prediction (v0.9.0)
+
+Your keys have to travel to the server and the new position has to come back, so on a slow connection
+your own character used to react about one ping late. Now the browser **replays your recent key presses** on top of
+the newest server position (using the same steering rule as the server) and draws your character where the server
+is about to put it. It is only a drawing guess: the server still decides everything, the guess is redone from
+every snapshot, and small differences fade out smoothly. It is not used while you are stunned or frozen, and it
+does not guess knockbacks, collisions with other players or jumps (those still wait for the server).
+
+* Measured in simulated slow connections (server rules, 20 / 50 / 100 ms each way): the drawn position was
+  3-6 px from the server's real position, instead of 11-37 px with the old method.
+* Measured in real headless Chromium with a 60 ms-each-way delay: pressing a key to the first visible movement went
+  from about 150 ms to about 40 ms.
+* Add `?nopredict` to the address (for example `http://localhost:3000/?nopredict`) to switch it off and compare how it feels.
+  If prediction ever looks wrong, that switch is the first thing to try.
+* Other players are still drawn slightly in the past so they move smoothly, so you may be a little "ahead" of them on a slow
+  connection. That is normal for online games.
+* Ping itself cannot be removed by code. If the server is far away from you, the best fix is a server near you.
 
 ### Coins and the Shop (cosmetics only)
 
@@ -346,7 +431,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **207 automated tests** (about 45 seconds):
+runs **267 automated tests** (about a minute):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -384,7 +469,15 @@ runs **207 automated tests** (about 45 seconds):
   hand-edited saves are repaired, the < > buttons only visit owned items, old saved looks are
   swapped for owned ones, how long a match takes to earn an item, and that trophy items cannot be bought
   with any number of coins).
-* `tests/network.test.js` (25 tests) - a real server with real WebSocket clients: rooms,
+* `tests/minigames3.test.js` (40 tests) - the six newest minigames: scripted rules for each (tile stealing, calls and
+  splats, rope sweeps and the wild reversal, gate order and hurdles, buried treasure staying secret, mole stomping),
+  plus random full rounds of every game and variant with 1-8 players, and each game running inside a real Room.
+* `tests/stamina.test.js` (10 tests) - the shared jump/shove stamina: costs, refill delay, buffering, the power-ups,
+  Crumble Floor and Prop Hunt exceptions.
+* `tests/predict.test.js` (7 tests) - the movement prediction: replays a whole round against the real server rules
+  with 20-100 ms delays and checks the guess is far closer than the old method, walls, smoothing, and that every
+  game's snapshot carries the steering info.
+* `tests/network.test.js` (28 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
   reconnect + host migration, seat expiry, leaving mid-round, duplicate-message safety, and
@@ -445,6 +538,8 @@ total-mayhem/
       propHunt.js         ALL the rules of Prop Hunt (and the per-player secret snapshots)
       meteorMayhem.js     ALL the rules of Meteor Mayhem
       crownChaos.js       ALL the rules of Crown Chaos
+      paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
+    stamina.js            the shared jump/shove stamina numbers and helpers
     rewards.js            how many coins a round / match is worth
     powerups.js           the pit-stop power-ups: catalogue, prices, limits
   public/                 everything the browser downloads
@@ -455,15 +550,19 @@ total-mayhem/
       renderer.js         draws characters, hats, tiles, coins, bomb, hill, props, meteors, crown, goo, particles (no image files!)
       shop.js             the shop catalogue, prices and the coin wallet (no drawing, easy to test)
       music.js            the background music: tunes as data + the player (no audio files)
-      achievements.js     the 26 achievements, counting, and which ones give a hat or skin (easy to test)
+      achievements.js     the 32 achievements, counting, and which ones give a hat or skin (easy to test)
       constants.js        colours, skin names, hat names, floor themes
       audio.js            synthesized placeholder sound effects
       input.js            keyboard handling
       net.js              Socket.IO wrapper + saved seat
+      predict.js          guesses where your own character is right now (hides ping)
   tests/
     game.test.js          Crumble Floor rules tests
     minigames.test.js     Gold Grab / Hot Potato / Hill Hustle + schedule tests
     minigames2.test.js    Prop Hunt / Meteor Mayhem / Crown Chaos tests
+    minigames3.test.js    Paint Panic / Color Call / Jump Rope / Lap Dash / Dig Dash / Mole Stomp tests
+    stamina.test.js       jump + shove stamina tests
+    predict.test.js       movement prediction tests
     shop.test.js          coin rewards + shop tests
     powerups.test.js      pit stop + power-up tests
     achievements.test.js  trophy case tests
@@ -581,7 +680,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 207 automated tests pass.
+* All 267 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -617,6 +716,23 @@ ever want coins to follow players between devices, that is the step to take.
   have to hide, how strong the seeker is, how fast meteors fall, and how long the crown lasts.
   Likewise the **shop prices, coin rewards, power-up strengths and prices, and achievement goals** are first guesses. These are first guesses
   and need a few real play sessions to tune.
+
+* **Real browser, this release (v0.9.0):** headless Chromium played each of the six new minigames against the real
+  server (moving, jumping and shoving) and I looked at a screenshot of each: Paint Panic tiles turning to the
+  player's colour, Color Call's zones and called colour, the Jump Rope sweeping across the floor, Lap Dash's gates and hurdles, Dig Dash's X marks and
+  Mole Stomp's burrows and a red mole. The stamina bar is on screen and drains when you jump and shove. Two browser windows tried **public rooms**: the list was empty,
+  the host ticked Public, the other window saw the room and clicked it to join, and unticking removed it. The pit stop showed all
+  seven power-ups. No page errors appeared. Along the way this found two real bugs (the home-page list could start empty
+  until the next refresh, and F3 reacted a second late); both are fixed.
+* **The balance of the six newest games and of stamina is untested by humans.** How big the bar is, the costs, the rope speed, how long
+  a Color Call lasts, how many bombs Dig Dash buries, how often moles appear, and how strong the Lap Dash rubber band is are first guesses. Bots prove the
+  games run and finish, not that they are fun. The bigger shove reach (115) may also make shoving feel too strong. Tune the numbers
+  at the top of each game file and in `server/stamina.js`.
+* **Room size and prediction in a real browser:** the lobby's Players menu works for the host, is greyed out for guests, and
+  limits joining (tests + Chromium). With a simulated slow connection, movement started on screen about 110 ms sooner. I have
+  **not** felt it with my hands, and I have not tested real-internet ping or a crowded 8-player match with prediction on.
+* I did not test public rooms across the real internet, only on one machine, and did not look at the mobile layout of the new list
+  beyond checking that it fits a narrow window.
 
 **Not verified (please check these yourself):**
 * I cannot play it as a human: I have **not** felt the controls,
@@ -657,7 +773,7 @@ ever want coins to follow players between devices, that is the step to take.
 | 2. First playable minigame | Done (and it is already networked, see the reordering note below) |
 | 3. Minigame framework + more minigames | Done: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle, Prop Hunt, Meteor Mayhem, Crown Chaos |
 | 4. Online multiplayer hardening | Mostly done early; remaining: deployment testing, stress tests |
-| 5. Sabotage variety, achievements, cosmetic unlocks | **Done:** coin shop, pit-stop power-ups, 26 achievements with trophy hats and skins. Still planned: more sabotage variety |
+| 5. Sabotage variety, achievements, cosmetic unlocks | **Done:** coin shop, pit-stop power-ups, 32 achievements with trophy hats and skins. Still planned: more sabotage variety |
 | 6. Polish, prediction, touch controls, deployment guide | Planned |
 
 **Why I reordered:** the brief suggests networking in Milestone 4, but I built the first

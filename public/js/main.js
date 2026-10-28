@@ -13,6 +13,7 @@
 import { socket, request, saveSession, loadSession, clearSession } from './net.js';
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
+import { Predictor, arenaWalkable } from './predict.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 import { music, sceneFor } from './music.js';
 import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, THEMES } from './constants.js';
@@ -116,7 +117,14 @@ S.look = loadLook();
 
 const renderer = new Renderer($('game-canvas'));
 
+const predictor = new Predictor();
+// Handy for testing: add ?nopredict to the address to switch the movement guessing off (and compare
+// how it feels), or ?debug to expose the latest drawn frame as window.__tmFrame.
+const URL_FLAGS = new URLSearchParams(location.search);
+const NO_PREDICT = URL_FLAGS.has('nopredict');
+const DEBUG = URL_FLAGS.has('debug');
 const input = new Input((controls) => {
+  predictor.record(performance.now(), controls.mx, controls.my); // so your own character can react at once
   // (Normal emit, not "volatile": a lost "jump pressed" message would feel awful,
   // and these messages are tiny.)
   if (S.room && S.room.phase === 'playing') socket.emit('game:input', controls);
@@ -151,7 +159,10 @@ function animateAvatars(tSec) {
 
 function showView(v) {
   S.view = v;
-  if (v === 'title') music.setScene(sceneFor({ phase: 'title' }));
+  if (v === 'title') {
+    music.setScene(sceneFor({ phase: 'title' }));
+    setTimeout(refreshPublicRooms, 50);
+  }
   $('screen-title').classList.toggle('hidden', v !== 'title');
   $('screen-lobby').classList.toggle('hidden', v !== 'lobby');
   $('stage-wrap').classList.toggle('hidden', v !== 'stage');
@@ -303,9 +314,9 @@ async function createRoom() {
   if (!res.ok) titleError(res.error);
 }
 
-async function joinRoom() {
+async function joinRoom(forcedCode) {
   titleError('');
-  const code = $('code-input').value.trim().toUpperCase();
+  const code = (typeof forcedCode === 'string' ? forcedCode : $('code-input').value).trim().toUpperCase();
   if (code.length !== 4) {
     titleError('Room codes have 4 letters. Ask the host for theirs!');
     return;
@@ -323,6 +334,49 @@ async function joinRoom() {
   else if (res.lateJoin) toast('A round is in progress. You will jump in next round!');
 }
 
+// ---- public rooms list (home page) -------------------------------------------
+let publicBusy = false;
+async function refreshPublicRooms() {
+  if (publicBusy || S.view !== 'title' || !socket.connected) return;
+  publicBusy = true;
+  const res = await request('rooms:list', null);
+  publicBusy = false;
+  renderPublicRooms(res && res.ok ? res.rooms : null);
+}
+
+function renderPublicRooms(rooms) {
+  const box = $('public-list');
+  box.textContent = '';
+  if (!rooms) {
+    box.appendChild(el('div', 'public-empty', 'Could not load the list. Try the refresh button.'));
+    return;
+  }
+  if (rooms.length === 0) {
+    box.appendChild(el('div', 'public-empty', 'No public rooms right now. Create one and tick "Public room" in the lobby!'));
+    return;
+  }
+  for (const r of rooms) {
+    const row = el('button', 'public-row');
+    row.type = 'button';
+    const playing = r.phase !== 'lobby' && r.phase !== 'final';
+    row.appendChild(el('span', 'pr-host', `${r.host}'s room`));
+    row.appendChild(el('span', 'pr-code', r.code));
+    row.appendChild(el('span', 'pr-count', `${r.players}/${r.max}`));
+    row.appendChild(el('span', 'pr-state' + (playing ? ' live' : ''), playing ? `Playing (round ${r.round}/${r.rounds})` : 'In the lobby'));
+    row.appendChild(el('span', 'pr-join', 'Join'));
+    row.addEventListener('click', () => {
+      sfx.click();
+      $('code-input').value = r.code;
+      joinRoom(r.code);
+    });
+    box.appendChild(row);
+  }
+}
+
+setInterval(() => {
+  if (!document.hidden) refreshPublicRooms();
+}, 5000);
+
 function enterRoom(res) {
   S.me = res.playerId;
   saveSession(res.code, res.token);
@@ -334,6 +388,7 @@ function leaveToTitle(message) {
   S.me = null;
   S.room = null;
   S.snaps = [];
+  predictor.clear();
   input.setEnabled(false);
   renderer.reset();
   $('overlay-intro').classList.add('hidden');
@@ -388,6 +443,21 @@ function renderLobby(st) {
   }
   sel.value = String(st.rounds);
   sel.disabled = !host;
+  const maxSel = $('max-select');
+  const cap = st.playerCap || st.maxPlayers;
+  if (maxSel.dataset.sig !== String(cap)) {
+    maxSel.textContent = '';
+    for (let n = 2; n <= cap; n++) {
+      const o = el('option', null, `up to ${n}`);
+      o.value = String(n);
+      maxSel.appendChild(o);
+    }
+    maxSel.dataset.sig = String(cap);
+  }
+  maxSel.value = String(st.maxPlayers);
+  maxSel.disabled = !host;
+  $('public-wrap').classList.toggle('hidden', !host);
+  $('public-check').checked = !!st.isPublic;
 
   $('btn-ready').classList.toggle('hidden', host);
   $('btn-ready').textContent = me && me.ready ? 'Ready! (click to undo)' : "I'm ready!";
@@ -955,11 +1025,13 @@ function onPhaseEnter(prev, st) {
     case 'lobby':
       renderer.reset();
       S.snaps = [];
+      predictor.clear();
       showView('lobby');
       break;
     case 'intro':
       renderer.reset();
       S.snaps = [];
+      predictor.clear();
       S.theme = (st.intro && st.intro.theme) || 'sunny';
       showView('stage');
       sfx.click();
@@ -967,6 +1039,7 @@ function onPhaseEnter(prev, st) {
     case 'pitstop':
       renderer.reset();
       S.snaps = [];
+      predictor.clear();
       pitMsg('');
       showView('stage');
       sfx.click();
@@ -974,6 +1047,7 @@ function onPhaseEnter(prev, st) {
     case 'playing': {
       renderer.reset();
       S.snaps = [];
+      predictor.clear();
       S.cdShown = null;
       S.goUntil = 0;
       showView('stage');
@@ -1029,6 +1103,12 @@ socket.on('game:snap', (snap) => {
 function nameOf(id) {
   const m = S.meta.get(id);
   return m ? m.name : '?';
+}
+
+// A player's colour as a CSS colour (for splashes and floating text).
+function colorOf(id) {
+  const m = S.meta.get(id);
+  return m ? COLORS[m.color % COLORS.length].hex : '#ffffff';
 }
 
 const BONKS = ['BONK!', 'OOF!', 'YEET!', 'BOOP!', 'WHAM!', 'SHOVED!'];
@@ -1089,6 +1169,103 @@ function handleEvents(snap) {
         renderer.floatText(OX + ev.x, OY + ev.y - 70, 'SPLAT!', '#d9a7ff', 26);
         renderer.burst(OX + ev.x, OY + ev.y - 10, ['#9b5de5', '#d9a7ff'], 10, 160, 'circle', 0.6);
         sfx.slow();
+        break;
+      case 'splat':
+        renderer.burst(OX + ev.x, OY + ev.y - 10, [colorOf(ev.id), '#ffffff'], 12, 220, 'circle', 0.6);
+        renderer.floatText(OX + ev.x, OY + ev.y - 60, 'SPLAT!', colorOf(ev.id), 24);
+        sfx.hit();
+        break;
+      case 'call':
+        sfx.pass();
+        renderer.addShake(2);
+        break;
+      case 'safe':
+        renderer.burst(OX + ev.x, OY + ev.y - 20, ['#8ef0a8', '#ffffff'], mine ? 10 : 4, 160, 'star', 0.5);
+        if (mine) {
+          renderer.floatText(OX + ev.x, OY + ev.y - 70, 'SAFE! +1', '#8ef0a8', 24);
+          sfx.coin();
+        }
+        break;
+      case 'miss':
+        renderer.burst(OX + ev.x, OY + ev.y - 10, ['#9b5de5', '#d9a7ff'], 10, 170, 'circle', 0.6);
+        renderer.floatText(OX + ev.x, OY + ev.y - 64, 'SPLAT!', '#d9a7ff', 24);
+        if (mine) {
+          sfx.slow();
+          renderer.addShake(8);
+        }
+        break;
+      case 'clear':
+        renderer.burst(OX + ev.x, OY + ev.y - 40, ['#ffe66d', '#ffffff'], mine ? 10 : 4, 150, 'star', 0.5);
+        if (mine) {
+          renderer.floatText(OX + ev.x, OY + ev.y - 80, '+1', '#fff27a', 28);
+          sfx.coin();
+        }
+        break;
+      case 'tangle':
+        renderer.burst(OX + ev.x, OY + ev.y - 20, ['#ff9a8b', '#ffffff'], 8, 170, 'circle', 0.5);
+        renderer.floatText(OX + ev.x, OY + ev.y - 64, 'TANGLED!', '#ffb3a7', 22);
+        renderer.addShake(mine ? 9 : 3);
+        sfx.hit();
+        break;
+      case 'flipWarn':
+        toast('The rope is about to REVERSE!');
+        sfx.tick();
+        break;
+      case 'flip':
+        renderer.addShake(5);
+        sfx.zone();
+        break;
+      case 'gate':
+        if (mine) {
+          sfx.gate();
+          if (ev.lap) {
+            renderer.floatText(OX + ev.x, OY + ev.y - 50, 'LAP!', '#fff27a', 30);
+            sfx.jackpot();
+          }
+        }
+        break;
+      case 'trip':
+        renderer.dust(OX + ev.x, OY + ev.y, '#ffffff', 8);
+        renderer.floatText(OX + ev.x, OY + ev.y - 60, 'TRIPPED!', '#ffb3a7', 22);
+        renderer.addShake(mine ? 8 : 3);
+        sfx.deny();
+        break;
+      case 'dug':
+        renderer.burst(OX + ev.x, OY + ev.y - 14, ['#ffd23f', '#fff27a', '#ffffff'], ev.v >= 5 ? 20 : 8, ev.v >= 5 ? 260 : 150, 'star', 0.7);
+        renderer.floatText(OX + ev.x, OY + ev.y - 56, `+${ev.v}`, '#fff27a', 28);
+        if (ev.v >= 5) sfx.jackpot();
+        else sfx.coin(mine ? 1 : 0.5);
+        break;
+      case 'dugBomb':
+        renderer.burst(OX + ev.x, OY + ev.y - 10, ['#ff9a3c', '#ff5a4d', '#ffffff'], 24, 320, 'circle', 0.7);
+        renderer.floatText(OX + ev.x, OY + ev.y - 70, 'BOOM!', '#ff9a8b', 34);
+        renderer.addShake(14);
+        sfx.boom();
+        break;
+      case 'rumble':
+        sfx.rumble();
+        break;
+      case 'stomp':
+        renderer.burst(OX + ev.x, OY + ev.y - 16, ev.gold ? ['#ffd23f', '#fff27a', '#ffffff'] : ['#c9a66b', '#ffffff'], ev.gold ? 18 : 9, 200, 'star', 0.6);
+        renderer.floatText(OX + ev.x, OY + ev.y - 70, `+${ev.v}`, '#fff27a', 28);
+        renderer.addShake(mine ? 6 : 2);
+        sfx.stomp(mine ? 1 : 0.5);
+        if (ev.gold) sfx.jackpot();
+        break;
+      case 'bite':
+        renderer.floatText(OX + ev.x, OY + ev.y - 70, 'OUCH! -2', '#ff9a8b', 26);
+        renderer.addShake(mine ? 9 : 3);
+        sfx.deny();
+        break;
+      case 'tired':
+        if (mine) {
+          sfx.deny();
+          const box = $('stamina');
+          box.classList.remove('tired');
+          void box.offsetWidth;
+          box.classList.add('tired');
+          renderer.floatText(OX + ev.x, OY + ev.y - 70, 'TIRED!', '#ffb3a7', 22);
+        }
         break;
       case 'deny':
         if (mine) {
@@ -1302,6 +1479,17 @@ function sampleFrame(now) {
       // Your own character is drawn at the freshest position (plus a tiny
       // prediction) so it feels responsive.
       if (p.st !== 'alive') return p;
+      // Replay your recent key presses on top of the newest server position (see predict.js).
+      const guess = NO_PREDICT ? null : predictor.predict(p, {
+        now,
+        recvAt: latest.r,
+        rtt: S.net.ping == null ? 60 : S.net.ping,
+        walkable: latest.s.gid === 'crumbleFloor' ? null : arenaWalkable,
+      });
+      if (guess) {
+        const airborne = Math.max(0, p.z + p.vz * ahead);
+        return { ...p, x: guess.x, y: guess.y, fx: guess.fx, fy: guess.fy, z: airborne };
+      }
       return { ...p, x: p.x + p.vx * ahead, y: p.y + p.vy * ahead, z: Math.max(0, p.z + p.vz * ahead) };
     }
     const pa = a.s.map.get(p.id);
@@ -1324,6 +1512,7 @@ function sampleFrame(now) {
     puddles: latest.s.pd,
     meta: S.meta,
     myId: S.me,
+    arena,
     cols: arena ? arena.cols : 14,
     rows: arena ? arena.rows : 9,
     finished: latest.s.fin,
@@ -1361,6 +1550,18 @@ function updateHud(frame) {
   else if (ghost) frac = mine.am <= 0 ? 0 : 1 - Math.min(1, mine.pc / arena.gooCooldown);
   fill.style.transform = `scaleX(${frac.toFixed(2)})`;
   $('ab-shove').classList.toggle('cooling', frac < 1);
+
+  // Stamina (jump and shove share it). Tick marks show the price of each move.
+  const stam = $('stamina');
+  if (mine && mine.sm > 0 && mine.st === 'alive') {
+    stam.classList.remove('hidden');
+    $('stamina-fill').style.transform = `scaleX(${Math.max(0, Math.min(1, mine.sp / mine.sm)).toFixed(3)})`;
+    stam.classList.toggle('low', mine.sp < Math.min(arena.jumpCost || 25, arena.shoveCost || 35));
+    $('stamina-mark-j').style.left = `${Math.min(100, ((arena.jumpCost || 25) / mine.sm) * 100)}%`;
+    $('stamina-mark-s').style.left = `${Math.min(100, ((arena.shoveCost || 35) / mine.sm) * 100)}%`;
+  } else {
+    stam.classList.add('hidden');
+  }
 
   // Scoreboard chips (rebuilt only when something changes)
   // (In the arena games the chips show this round's score: coins, booms, seconds.)
@@ -1476,6 +1677,7 @@ function loop(now) {
     const frame = sampleFrame(now);
     syncStageBg((frame && frame.theme) || S.theme);
     if (frame) {
+      if (DEBUG) window.__tmFrame = frame;
       renderer.draw(frame, dt);
       if (S.room && (S.room.phase === 'playing' || S.room.phase === 'results')) updateHud(frame);
     } else {
@@ -1508,7 +1710,7 @@ function bindUi() {
   });
 
   $('btn-create').addEventListener('click', createRoom);
-  $('btn-join').addEventListener('click', joinRoom);
+  $('btn-join').addEventListener('click', () => joinRoom());
   $('code-input').addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
   });
@@ -1537,6 +1739,7 @@ function bindUi() {
     if (e.key === 'F3') {
       e.preventDefault();
       S.showPerf = !S.showPerf;
+      $('perf-hud').classList.toggle('hidden', !S.showPerf);
     }
   });
 
@@ -1560,6 +1763,26 @@ function bindUi() {
     $('lobby-error').textContent = '';
     const res = await request('match:start');
     if (!res.ok) $('lobby-error').textContent = res.error;
+  });
+  $('public-check').addEventListener('change', async (e) => {
+    const res = await request('room:public', e.target.checked);
+    if (!res.ok) {
+      toast(res.error);
+      e.target.checked = !e.target.checked;
+    } else {
+      toast(res.isPublic ? 'Your room is now listed on the home page.' : 'Your room is private again.');
+    }
+  });
+  $('public-refresh').addEventListener('click', () => {
+    sfx.click();
+    refreshPublicRooms();
+  });
+  $('max-select').addEventListener('change', async (e) => {
+    const res = await request('room:max', Number(e.target.value));
+    if (!res.ok) {
+      toast(res.error || 'Could not change that.');
+      if (S.room) $('max-select').value = String(S.room.maxPlayers);
+    }
   });
   $('rounds-select').addEventListener('change', async (e) => {
     const res = await request('room:rounds', Number(e.target.value));
@@ -1625,6 +1848,7 @@ async function tryRejoin() {
 
 socket.on('connect', async () => {
   $('conn-banner').classList.add('hidden');
+  refreshPublicRooms(); // the home page list may have been asked for before we were connected
   if (S.booted) await tryRejoin();
 });
 socket.on('disconnect', () => {

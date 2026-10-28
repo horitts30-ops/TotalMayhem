@@ -621,8 +621,8 @@ test('the schedule uses every minigame before repeating and never plays the same
   const ids = Object.keys(games.GAMES);
   assert.ok(ids.length >= 4);
   for (let trial = 0; trial < 200; trial++) {
-    const sched = games.buildSchedule(8, seeded(trial + 1));
-    assert.equal(sched.length, 8);
+    const sched = games.buildSchedule(ids.length + 1, seeded(trial + 1));
+    assert.equal(sched.length, ids.length + 1);
     for (let i = 1; i < sched.length; i++) assert.notEqual(sched[i].game, sched[i - 1].game, `trial ${trial}`);
     assert.equal(new Set(sched.slice(0, ids.length).map((s) => s.game)).size, ids.length, 'first lap uses every game');
     for (const s of sched) assert.ok(games.GAMES[s.game].VARIANTS[s.variant], 'valid variant');

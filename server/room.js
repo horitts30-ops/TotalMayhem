@@ -27,6 +27,8 @@ class Room {
 
     this.players = new Map(); // id -> player record (insertion order = join order)
     this.hostId = null;
+    this.isPublic = false; // listed on the home page for anybody to join
+    this.maxPlayers = cfg.MAX_PLAYERS; // the host can lower this in the lobby
 
     this.phase = 'lobby';
     this.phaseEndsAt = 0;
@@ -59,7 +61,7 @@ class Room {
   }
 
   isFull() {
-    return this.players.size >= this.cfg.MAX_PLAYERS;
+    return this.players.size >= this.maxPlayers;
   }
 
   uniqueName(wanted, exceptId) {
@@ -76,7 +78,7 @@ class Room {
   }
 
   addPlayer(info) {
-    if (this.isFull()) throw new Error('That room is full (8 players max).');
+    if (this.isFull()) throw new Error(`That room is full (${this.maxPlayers} players max).`);
     const player = {
       id: randomId(4),
       token: randomId(16),
@@ -157,6 +159,40 @@ class Room {
     if (!p || (this.phase !== 'lobby' && this.phase !== 'final')) return;
     p.ready = ready === true;
     this.broadcastState();
+  }
+
+  // The host can list the room on the home page (or hide it again).
+  setPublic(playerId, on) {
+    if (playerId !== this.hostId) return 'Only the host can change that.';
+    this.isPublic = on === true;
+    this.broadcastState();
+    return null;
+  }
+
+  // What the public list shows about this room. Never includes tokens or ids.
+  listing() {
+    const host = this.players.get(this.hostId);
+    return {
+      code: this.code,
+      host: host ? host.name : '?',
+      players: this.connectedPlayers().length,
+      max: this.maxPlayers,
+      phase: this.phase,
+      round: this.round,
+      rounds: this.rounds,
+    };
+  }
+
+  // The host picks how many players the room holds (2 up to the server's limit).
+  setMaxPlayers(playerId, n) {
+    if (playerId !== this.hostId) return 'Only the host can change that.';
+    if (this.phase !== 'lobby' && this.phase !== 'final') return 'You can only change that between matches.';
+    const max = safeInt(n, 1, 999, 0);
+    if (max < 2 || max > this.cfg.MAX_PLAYERS) return `Pick a number from 2 to ${this.cfg.MAX_PLAYERS}.`;
+    if (max < this.players.size) return `There are already ${this.players.size} players in the room.`;
+    this.maxPlayers = max;
+    this.broadcastState();
+    return null;
   }
 
   setRounds(playerId, n) {
@@ -437,12 +473,15 @@ class Room {
       code: this.code,
       matchId: this.matchId(),
       hostId: this.hostId,
+      isPublic: this.isPublic,
       phase: this.phase,
       round: this.round,
       rounds: this.rounds,
       allowedRounds: this.cfg.ALLOWED_ROUNDS,
       minPlayers: this.cfg.MIN_PLAYERS_TO_START,
-      maxPlayers: this.cfg.MAX_PLAYERS,
+      maxPlayers: this.maxPlayers,
+      playerCap: this.cfg.MAX_PLAYERS,
+      minRoomSize: 2,
       endsInMs: this.phaseEndsAt ? Math.max(0, this.phaseEndsAt - now) : 0,
       players: [...this.players.values()].map((p) => ({
         id: p.id,
@@ -493,6 +532,20 @@ class RoomManager {
 
   get(code) {
     return this.rooms.get(code) || null;
+  }
+
+  // Rooms whose host chose "public": joinable ones first (waiting in the lobby),
+  // then rooms already playing (late joiners are welcome). Full or empty rooms
+  // are left out, and the list is capped so it can never become huge.
+  listPublic(limit = 30) {
+    const out = [];
+    for (const room of this.rooms.values()) {
+      if (!room.isPublic || room.isFull() || room.connectedPlayers().length === 0) continue;
+      out.push(room.listing());
+    }
+    const waiting = (r) => (r.phase === 'lobby' || r.phase === 'final' ? 0 : 1);
+    out.sort((a, b) => waiting(a) - waiting(b) || b.players - a.players || a.code.localeCompare(b.code));
+    return out.slice(0, limit);
   }
 
   // Called each server tick.

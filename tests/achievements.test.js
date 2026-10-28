@@ -114,16 +114,19 @@ test('achievements: losing a match still counts as played, not won', async () =>
   assert.ok(!t.unlocked.champion);
 });
 
-test('achievements: each minigame has its own win, and winning all seven gives the Galaxy skin', async () => {
+test('achievements: each minigame has its own win, and winning every one gives the Galaxy skin', async () => {
   const A = await load('achievements.js');
   const shop = await load('shop.js');
   const t = A.emptyTrophies();
-  const games = ['crumbleFloor', 'goldGrab', 'hotPotato', 'hillHustle', 'propHunt', 'meteorMayhem', 'crownChaos'];
+  const games = [
+    'crumbleFloor', 'goldGrab', 'hotPotato', 'hillHustle', 'propHunt', 'meteorMayhem', 'crownChaos',
+    'paintPanic', 'colorCall', 'jumpRope', 'lapDash', 'digDash', 'moleStomp',
+  ];
   let unlocked = [];
   games.forEach((g, i) => {
     unlocked = unlocked.concat(ids(A.recordRound(t, round({ matchId: 'g' + i, game: g }), row({ place: 1 }))));
   });
-  for (const id of ['win_floor', 'win_gold', 'win_potato', 'win_hill', 'win_prop', 'win_meteor', 'win_crown', 'jack']) {
+  for (const id of ['win_floor', 'win_gold', 'win_potato', 'win_hill', 'win_prop', 'win_meteor', 'win_crown', 'win_paint', 'win_color', 'win_rope', 'win_lap', 'win_dig', 'win_mole', 'jack']) {
     assert.ok(unlocked.includes(id), id);
   }
   const w = shop.emptyWallet();
