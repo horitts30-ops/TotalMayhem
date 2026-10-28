@@ -37,6 +37,37 @@ function place(p, x, y, fx = 1, fy = 0) {
   p.fy = fy;
 }
 
+const press = (g, id, input) => g.setInput(id, { mx: 0, my: 0, jump: false, shove: false, ...input });
+const tap = (g, id, key) => {
+  press(g, id, { [key]: true });
+  g.tick(DT);
+  press(g, id, {});
+  g.tick(DT);
+};
+
+test('rage: there is no stamina - you can jump and shove with an empty bar, and nothing is spent', () => {
+  for (const Game of [GoldGrab, CrumbleFloor]) {
+    for (const rage of [false, true]) {
+      const g = make(Game, rage);
+      const p = g.players.get('p1');
+      place(p, 300, 288);
+      place(g.players.get('p2'), 700, 288);
+      p.stamina = 0;
+      p.staminaWait = 5;
+      tap(g, 'p1', 'jump');
+      for (let i = 0; i < 90 && (p.z > 0 || p.shoveCd > 0); i++) g.tick(DT);
+      tap(g, 'p1', 'shove');
+      if (rage) {
+        assert.equal(p.jumps, 1, `${Game.name}: rage jump works while "tired"`);
+        assert.equal(p.shoves, 1, `${Game.name}: rage shove works while "tired"`);
+        assert.equal(p.stamina, 0, `${Game.name}: nothing is spent or refilled`);
+      } else {
+        assert.equal(p.jumps, 0, `${Game.name}: normal mode still needs stamina`);
+      }
+    }
+  }
+});
+
 // Shoves p2 once and reports how hard and how far it flew.
 function shoveTest(Game, rage) {
   const g = make(Game, rage);

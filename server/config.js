@@ -49,6 +49,7 @@ module.exports = {
   // Cosmetic choices that exist (the client draws them; the server only
   // checks that the numbers are in range).
   COLOR_COUNT: 12,
-  HAT_COUNT: 22, // 16 normal + 6 you can only unlock with achievements
-  SKIN_COUNT: 12, // 8 normal + 4 achievement skins
+  HAT_COUNT: 52, // 16 normal + 6 achievement hats + 30 pack-only hats
+  BACK_COUNT: 22, // capes, cloaks and hoodies (index 0 = none)
+  SKIN_COUNT: 37, // 16 you can buy + 8 achievement skins + 13 pack-only skins
 };

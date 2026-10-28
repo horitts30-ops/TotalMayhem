@@ -245,4 +245,5 @@ HotPotato.TUNING = TUNING;
 HotPotato.RAGE = RAGE;
 HotPotato.VARIANTS = VARIANTS;
 
+HotPotato.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = HotPotato;

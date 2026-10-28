@@ -66,7 +66,7 @@ class PaintPanic extends ArenaGame {
     this.paintable = [];
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        this.paintable.push(ArenaGame.walkable(c * TILE + TILE / 2, r * TILE + TILE / 2));
+        this.paintable.push(this.canStand(c * TILE + TILE / 2, r * TILE + TILE / 2));
       }
     }
     this.owner = new Array(COLS * ROWS).fill(-1); // player index, or -1
@@ -201,4 +201,5 @@ PaintPanic.TUNING = TUNING;
 PaintPanic.RAGE = RAGE;
 PaintPanic.VARIANTS = VARIANTS;
 
+PaintPanic.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = PaintPanic;

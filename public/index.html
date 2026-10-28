@@ -28,8 +28,14 @@
             <span id="title-skin-name" class="hat-name">Plain</span>
             <button class="mini" id="title-skin-next" aria-label="Next skin">&#9654;</button>
           </div>
+          <div class="hat-row">
+            <button class="mini" id="title-back-prev" aria-label="Previous back item">&#9664;</button>
+            <span id="title-back-name" class="hat-name">No back item</span>
+            <button class="mini" id="title-back-next" aria-label="Next back item">&#9654;</button>
+          </div>
           <div id="title-swatches" class="swatches"></div>
           <button class="btn small shop-btn" id="title-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
+          <button class="btn small shop-btn packs-btn" id="title-packs" type="button">&#127924; Packs</button>
           <button class="btn small shop-btn trophy-btn" id="title-trophies" type="button">&#127942; Trophies <b class="trophy-count">0</b></button>
         </div>
 
@@ -94,7 +100,13 @@
           <span id="lobby-skin-name" class="hat-name">Plain</span>
           <button class="mini" id="lobby-skin-next" aria-label="Next skin">&#9654;</button>
         </div>
+        <div class="hat-row">
+          <button class="mini" id="lobby-back-prev" aria-label="Previous back item">&#9664;</button>
+          <span id="lobby-back-name" class="hat-name">No back item</span>
+          <button class="mini" id="lobby-back-next" aria-label="Next back item">&#9654;</button>
+        </div>
         <button class="btn small shop-btn" id="lobby-shop" type="button"><span class="coin"></span> Shop <b class="coin-count">0</b></button>
+        <button class="btn small shop-btn packs-btn" id="lobby-packs" type="button">&#127924; Packs</button>
         <button class="btn small shop-btn trophy-btn" id="lobby-trophies" type="button">&#127942; Trophies <b class="trophy-count">0</b></button>
       </div>
 
@@ -104,6 +116,9 @@
         </label>
         <label id="public-wrap" class="inline-field check" title="Show this room on the home page so anybody can join">
           <input type="checkbox" id="public-check"> Public room
+        </label>
+        <label id="map-wrap" class="inline-field hidden" title="The floor shape for the minigames that use maps (not every minigame does)">Map
+          <select id="map-select"></select>
         </label>
         <label id="max-wrap" class="inline-field" title="How many players this room can hold">Players
           <select id="max-select"></select>
@@ -227,6 +242,37 @@
           <div id="shop-grid" class="shop-grid"></div>
           <p class="shop-note">Earn coins by finishing rounds and matches with friends. Coins only buy cosmetics: no item changes how a game plays.</p>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== PACKS ================================ -->
+  <div id="overlay-packs" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Packs">
+    <div class="shop-panel packs-panel">
+      <div class="shop-head">
+        <h2>Packs</h2>
+        <div class="wallet-chip" title="Your coins"><span class="coin"></span> <b id="packs-coins">0</b></div>
+        <button id="packs-close" class="btn small ghost" type="button">Close</button>
+      </div>
+      <div id="pack-list" class="pack-list"></div>
+      <p id="pack-pity" class="shop-note"></p>
+      <p class="shop-note">Packs cost coins you earn by playing. There is no real money in this game. Cards you already own pay some coins back. Everything here is cosmetic: nothing changes how a minigame plays.</p>
+      <h3 class="outfit-title">Outfit book <small id="outfit-count"></small></h3>
+      <div id="outfit-grid" class="shop-grid outfit-grid"></div>
+    </div>
+  </div>
+
+  <!-- the pack opening screen -->
+  <div id="overlay-reveal" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Opening a pack">
+    <div class="shop-panel reveal-panel">
+      <h2 id="reveal-title" class="reveal-title">Opening...</h2>
+      <p id="reveal-hint" class="shop-note">Click a card to flip it!</p>
+      <div id="reveal-cards" class="reveal-cards"></div>
+      <div id="reveal-summary" class="reveal-summary"></div>
+      <div class="reveal-actions">
+        <button id="reveal-all" class="btn small" type="button">Flip all</button>
+        <button id="reveal-again" class="btn small hidden" type="button">Open another</button>
+        <button id="reveal-done" class="btn" type="button">Done</button>
       </div>
     </div>
   </div>

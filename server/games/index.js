@@ -107,4 +107,9 @@ function arenaFor(slot, opts = {}) {
   return typeof Game.arenaFor === 'function' ? Game.arenaFor(slot.variant, opts) : Game.arena;
 }
 
-module.exports = { GAMES, SCHEDULE_POOL, buildSchedule, describeSlot, createGame, arenaFor };
+// Does this minigame use the map floor shapes (server/maps.js)?
+function usesMaps(slot) {
+  return !!(slot && GAMES[slot.game] && GAMES[slot.game].MAP_OK);
+}
+
+module.exports = { GAMES, SCHEDULE_POOL, buildSchedule, describeSlot, createGame, arenaFor, usesMaps };

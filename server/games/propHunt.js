@@ -445,4 +445,5 @@ PropHunt.TUNING = TUNING;
 PropHunt.RAGE = RAGE;
 PropHunt.VARIANTS = VARIANTS;
 
+PropHunt.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = PropHunt;

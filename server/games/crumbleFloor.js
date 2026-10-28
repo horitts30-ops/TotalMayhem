@@ -24,6 +24,7 @@ const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
 const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
 const { rageVariant } = require('../rage');
+const { getMap } = require('../maps');
 
 // ----- Arena ---------------------------------------------------------------
 const TILE = 64;
@@ -163,16 +164,8 @@ const CONTROLS = [
 ];
 
 // ----- Helpers ----------------------------------------------------------------
-function buildKinds() {
-  const kinds = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const nx = (c + 0.5 - COLS / 2) / (COLS / 2);
-      const ny = (r + 0.5 - ROWS / 2) / (ROWS / 2);
-      kinds.push(nx * nx + ny * ny <= 1.25 ? SOLID : VOID);
-    }
-  }
-  return kinds;
+function buildKinds(map) {
+  return map.solid.map((on) => (on ? SOLID : VOID));
 }
 
 function placePoints(place, n) {
@@ -204,7 +197,8 @@ class CrumbleFloor {
     this._results = null;
     this.events = [];
 
-    this.kind = buildKinds();
+    this.map = getMap(options.mapId); // the floor shape (see server/maps.js)
+    this.kind = buildKinds(this.map);
     this.crackT = new Array(COLS * ROWS).fill(0);
     this.crackDur = new Array(COLS * ROWS).fill(1);
     this.nextWaveAt = TUNING.firstCrack;
@@ -218,10 +212,11 @@ class CrumbleFloor {
     participants.forEach((info, i) => {
       // Spread players around an ellipse, all facing the middle.
       const angle = n === 1 ? Math.PI : (i / n) * Math.PI * 2 - Math.PI / 2;
-      const x = WORLD_W / 2 + Math.cos(angle) * (n === 1 ? 0 : TILE * 3.6);
-      const y = WORLD_H / 2 + Math.sin(angle) * (n === 1 ? 0 : TILE * 2.4);
-      const dx = WORLD_W / 2 - x;
-      const dy = WORLD_H / 2 - y;
+      const sp = this.map.spawns && this.map.spawns[i % this.map.spawns.length];
+      const x = sp ? sp.x : WORLD_W / 2 + Math.cos(angle) * (n === 1 ? 0 : TILE * 3.6);
+      const y = sp ? sp.y : WORLD_H / 2 + Math.sin(angle) * (n === 1 ? 0 : TILE * 2.4);
+      const dx = this.map.center.x - x;
+      const dy = this.map.center.y - y;
       const d = Math.hypot(dx, dy) || 1;
       this.players.set(info.id, {
         id: info.id,
@@ -455,7 +450,7 @@ class CrumbleFloor {
 
     if (p.jumpBuf > 0) {
       if (grounded || p.coyote > 0) {
-        if (spendStamina(p, STAMINA.jumpCost)) {
+        if (spendStamina(p, this.rage ? 0 : STAMINA.jumpCost)) {
           p.vz = TUNING.jumpSpeed * (this.v.jump || 1) * p.mods.jump;
           p.z = 0.01;
           p.coyote = 0;
@@ -475,7 +470,7 @@ class CrumbleFloor {
     // --- Shove ------------------------------------------------------------
     if (p.shoveBuf > 0) {
       if (this.time >= 0 && p.shoveCd <= 0) {
-        if (spendStamina(p, STAMINA.shoveCost)) {
+        if (spendStamina(p, this.rage ? 0 : STAMINA.shoveCost)) {
           this._doShove(p);
           p.shoveBuf = 0;
         } else {
@@ -876,4 +871,5 @@ CrumbleFloor.COLS = COLS;
 CrumbleFloor.ROWS = ROWS;
 CrumbleFloor.CONSTANTS = { SOLID, CRACKING, GONE, VOID };
 
+CrumbleFloor.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = CrumbleFloor;

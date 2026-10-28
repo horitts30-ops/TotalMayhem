@@ -17,6 +17,7 @@ const { RoomManager } = require('./room');
 const { normalizeCode, cleanName } = require('./util');
 const { AdminLock, cleanAnnouncement } = require('./admin');
 const { EMOTES } = require('./emotes');
+const { mapChoices } = require('./maps');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -35,6 +36,7 @@ function createGameServer(options = {}) {
   app.disable('x-powered-by');
   app.use(express.static(PUBLIC_DIR));
   app.get('/health', (req, res) => res.type('text').send('ok'));
+  app.get('/api/maps', (req, res) => res.json(mapChoices())); // the lobby's map picker reads this
 
   const manager = new RoomManager(io, cfg, options.gameOptions);
   const admin = new AdminLock(cfg.ADMIN_CODE);
@@ -95,7 +97,7 @@ function createGameServer(options = {}) {
       if (socket.data.roomCode) leaveCurrentRoom(true);
       const room = manager.create();
       if (!room) return cb({ ok: false, error: 'The server is busy right now. Please try again in a minute.' });
-      const player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin });
+      const player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin, back: data.back });
       attach(room, player);
       log(`[room ${room.code}] created by ${player.name}`);
       cb({ ok: true, code: room.code, playerId: player.id, token: player.token });
@@ -111,7 +113,7 @@ function createGameServer(options = {}) {
       if (socket.data.roomCode) leaveCurrentRoom(true);
       let player;
       try {
-        player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin });
+        player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin, back: data.back });
       } catch (err) {
         return cb({ ok: false, error: err.message });
       }
@@ -155,6 +157,7 @@ function createGameServer(options = {}) {
         color: data && data.color,
         hat: data && data.hat,
         skin: data && data.skin,
+        back: data && data.back,
       });
     });
 
@@ -324,6 +327,13 @@ function createGameServer(options = {}) {
       if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
       const err = room.setRage(player.id, on_ === true);
       cbOf(cb)(err ? { ok: false, error: err } : { ok: true, rage: room.rage });
+    });
+
+    on('room:map', (pick, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setMap(player.id, typeof pick === 'string' ? pick.slice(0, 20) : '');
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, mapPick: room.mapPick });
     });
 
     on('room:max', (n, cb) => {

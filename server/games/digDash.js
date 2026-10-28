@@ -258,4 +258,5 @@ DigDash.TUNING = TUNING;
 DigDash.RAGE = RAGE;
 DigDash.VARIANTS = VARIANTS;
 
+DigDash.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = DigDash;

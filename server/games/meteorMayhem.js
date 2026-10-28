@@ -140,7 +140,7 @@ class MeteorMayhem extends ArenaGame {
       const a = this.rng() * Math.PI * 2;
       const d = 30 + this.rng() * this.cfg.aimJitter;
       pt = { x: target.x + Math.cos(a) * d, y: target.y + Math.sin(a) * d };
-      if (!ArenaGame.walkable(pt.x, pt.y)) pt = this._randomPoint(40);
+      if (!this.canStand(pt.x, pt.y)) pt = this._randomPoint(40);
     } else {
       pt = this._randomPoint(40);
     }
@@ -229,4 +229,5 @@ MeteorMayhem.TUNING = TUNING;
 MeteorMayhem.RAGE = RAGE;
 MeteorMayhem.VARIANTS = VARIANTS;
 
+MeteorMayhem.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = MeteorMayhem;

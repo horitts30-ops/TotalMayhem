@@ -47,6 +47,30 @@ export function arenaWalkable(x, y) {
   return tileSolid(x, y) && tileSolid(x - m, y) && tileSolid(x + m, y) && tileSolid(x, y - m) && tileSolid(x, y + m);
 }
 
+// The walkable rule for a given map (`rows` = the 9 strings the server sends in arena.floor,
+// '#' = solid). With no rows it is the classic oval. The last answer is remembered.
+let floorKey = '';
+let floorFn = arenaWalkable;
+export function walkableFor(rows) {
+  if (!Array.isArray(rows) || rows.length !== ROWS) return arenaWalkable;
+  const key = rows.join('|');
+  if (key === floorKey) return floorFn;
+  const solid = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) solid.push(String(rows[r])[c] === '#');
+  const at = (x, y) => {
+    const c = Math.floor(x / TILE);
+    const r = Math.floor(y / TILE);
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
+    return solid[r * COLS + c];
+  };
+  floorFn = (x, y) => {
+    const m = 14;
+    return at(x, y) && at(x - m, y) && at(x + m, y) && at(x, y - m) && at(x, y + m);
+  };
+  floorKey = key;
+  return floorFn;
+}
+
 export class Predictor {
   constructor() {
     this.hist = []; // { t (ms), mx, my }

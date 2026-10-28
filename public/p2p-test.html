@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Total Mayhem - Connection Test</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 16px 40px; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #fff2c9; color: #2b2340; line-height: 1.45;
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  p.sub { margin: 0 0 18px; color: #5b5075; }
+  .card { background: #fff; border: 3px solid #2b2340; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 4px 0 #2b2340; }
+  button {
+    font: inherit; font-weight: 700; padding: 12px 18px; border-radius: 12px; border: 3px solid #2b2340;
+    background: #ffca3a; color: #2b2340; cursor: pointer; box-shadow: 0 3px 0 #2b2340; margin: 4px 6px 4px 0;
+  }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #2b2340; }
+  button.alt { background: #8ac926; }
+  button:disabled { opacity: .5; cursor: default; }
+  input {
+    font: inherit; font-weight: 800; font-size: 1.5rem; letter-spacing: .25em; text-transform: uppercase;
+    width: 9em; padding: 8px 12px; border-radius: 12px; border: 3px solid #2b2340; margin-right: 6px;
+  }
+  .code { font-size: 2.6rem; font-weight: 900; letter-spacing: .3em; margin: 6px 0; }
+  .status { font-weight: 700; }
+  .good { color: #1d7a1d; } .warn { color: #b36b00; } .bad { color: #b3261e; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  td { padding: 4px 0; border-bottom: 1px dashed #d9cfa8; }
+  td:last-child { text-align: right; font-weight: 700; }
+  .small { font-size: .85rem; color: #5b5075; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connection test</h1>
+  <p class="sub">Checks whether two browsers can talk directly to each other (no game server). Open this page on two devices.</p>
+
+  <div class="card" id="start">
+    <strong>Which device is this?</strong><br>
+    <button id="btnHost">I'm the host</button>
+    <button id="btnJoin" class="alt">I'm joining</button>
+  </div>
+
+  <div class="card" id="hostBox" hidden>
+    <div>Tell the other device this code:</div>
+    <div class="code" id="code">....</div>
+    <div class="status" id="hostStatus">Getting a code...</div>
+  </div>
+
+  <div class="card" id="joinBox" hidden>
+    <div>Type the host's code:</div>
+    <input id="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <button id="btnGo">Connect</button>
+    <div class="status" id="joinStatus"></div>
+  </div>
+
+  <div class="card" id="resultBox" hidden>
+    <div class="status" id="verdict"></div>
+    <table id="table"></table>
+    <p class="small" id="explain"></p>
+  </div>
+
+  <p class="small" id="log"></p>
+</main>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const CODE_CHARS = 'BCDFGHJKMNPQRSTVWXZ';
+  const PREFIX = 'tmtest-';
+  const PINGS = 300;          // 300 pings at 30 per second = 10 seconds, like game traffic
+  const PING_MS = 1000 / 30;
+
+  // Optional override so the page can be tested against a local signaling server: ?sig=localhost:9000
+  function peerOptions() {
+    const sig = new URLSearchParams(location.search).get('sig');
+    if (!sig) return {};
+    const [host, port] = sig.split(':');
+    return { host, port: Number(port) || 9000, path: '/', secure: false };
+  }
+
+  function makeCode() {
+    let s = '';
+    for (let i = 0; i < 4; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    return s;
+  }
+
+  function say(el, text, cls) {
+    el.textContent = text;
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function logLine(text) { $('log').textContent = text; }
+
+  if (typeof Peer === 'undefined') {
+    logLine('Could not load the PeerJS library (is this device offline, or is unpkg.com blocked?).');
+    $('start').hidden = true;
+    return;
+  }
+
+  let peer = null;
+
+  // ---------- host ----------
+  $('btnHost').onclick = () => {
+    $('start').hidden = true;
+    $('hostBox').hidden = false;
+    openHostPeer(0);
+  };
+
+  function openHostPeer(attempt) {
+    const code = makeCode();
+    peer = new Peer(PREFIX + code, peerOptions());
+    peer.on('open', () => {
+      $('code').textContent = code;
+      say($('hostStatus'), 'Waiting for the other device to connect...');
+    });
+    peer.on('error', (e) => {
+      if (e.type === 'unavailable-id' && attempt < 5) { peer.destroy(); openHostPeer(attempt + 1); return; }
+      say($('hostStatus'), 'Problem: ' + e.type + '. Check your internet and reload the page.', 'bad');
+    });
+    peer.on('disconnected', () => { if (peer && !peer.destroyed) { try { peer.reconnect(); } catch (_) {} } });
+    peer.on('connection', (conn) => {
+      say($('hostStatus'), 'Connected! The other device is running the test...', 'good');
+      conn.on('data', (d) => {
+        if (!d || typeof d !== 'object') return;
+        if (d.t === 'ping') conn.send({ t: 'pong', n: d.n, s: d.s });
+        else if (d.t === 'report') showReport(d.r, 'host');
+      });
+      conn.on('close', () => { if ($('resultBox').hidden) say($('hostStatus'), 'The other device disconnected.', 'warn'); });
+    });
+  }
+
+  // ---------- joiner ----------
+  $('btnJoin').onclick = () => {
+    $('start').hidden = true;
+    $('joinBox').hidden = false;
+    $('codeIn').focus();
+  };
+  $('codeIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnGo').click(); });
+
+  $('btnGo').onclick = () => {
+    const code = $('codeIn').value.trim().toUpperCase();
+    if (code.length !== 4) { say($('joinStatus'), 'The code is 4 letters.', 'warn'); return; }
+    $('btnGo').disabled = true;
+    say($('joinStatus'), 'Connecting...');
+    peer = new Peer(undefined, peerOptions());
+    let opened = false;
+    const timer = setTimeout(() => {
+      if (!opened) {
+        say($('joinStatus'), "Couldn't connect after 20 seconds. Wrong code, or the two networks can't reach each other directly.", 'bad');
+        $('btnGo').disabled = false;
+      }
+    }, 20000);
+    peer.on('error', (e) => {
+      clearTimeout(timer);
+      const msg = e.type === 'peer-unavailable' ? 'No host with that code. Check the code and that the host page is still open.' : 'Problem: ' + e.type;
+      say($('joinStatus'), msg, 'bad');
+      $('btnGo').disabled = false;
+    });
+    peer.on('open', () => {
+      const conn = peer.connect(PREFIX + code, { reliable: false });   // unreliable, like real-time game traffic
+      conn.on('open', () => { opened = true; clearTimeout(timer); runTest(conn); });
+      conn.on('error', () => say($('joinStatus'), 'Connection error.', 'bad'));
+    });
+  };
+
+  async function runTest(conn) {
+    say($('joinStatus'), 'Connected! Running a 10-second test - keep this page open and visible...', 'good');
+    const rtts = [];
+    let sent = 0;
+    conn.on('data', (d) => {
+      if (d && d.t === 'pong' && typeof d.s === 'number') rtts.push(performance.now() - d.s);
+    });
+    await new Promise((r) => setTimeout(r, 500));   // let the channel settle
+    await new Promise((resolve) => {
+      const iv = setInterval(() => {
+        if (sent >= PINGS) { clearInterval(iv); resolve(); return; }
+        conn.send({ t: 'ping', n: sent, s: performance.now() });
+        sent++;
+        if (sent % 30 === 0) say($('joinStatus'), 'Testing... ' + Math.round(sent / 30) + ' / 10 s', 'good');
+      }, PING_MS);
+    });
+    await new Promise((r) => setTimeout(r, 1500)); // wait for late replies
+    const report = summarize(rtts, sent, await connectionType(conn.peerConnection));
+    say($('joinStatus'), 'Done.', 'good');
+    try { conn.send({ t: 'report', r: report }); } catch (_) {}
+    showReport(report, 'join');
+  }
+
+  async function connectionType(pc) {
+    try {
+      const stats = await pc.getStats();
+      let local = null, remote = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
+          local = stats.get(r.localCandidateId); remote = stats.get(r.remoteCandidateId);
+        }
+      });
+      if (!local || !remote) return 'unknown';
+      const types = [local.candidateType, remote.candidateType];
+      if (types.includes('relay')) return 'relay';
+      if (types.every((t) => t === 'host')) return 'same-network';
+      return 'direct';
+    } catch (_) { return 'unknown'; }
+  }
+
+  function summarize(rtts, sent, type) {
+    const s = rtts.slice().sort((a, b) => a - b);
+    const pick = (p) => (s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : null);
+    return {
+      sent, received: rtts.length,
+      lossPct: sent ? Math.round((1000 * (sent - rtts.length)) / sent) / 10 : 100,
+      median: pick(0.5), p95: pick(0.95), max: s.length ? s[s.length - 1] : null, type,
+    };
+  }
+
+  // ---------- results ----------
+  function showReport(r, role) {
+    $('hostBox').hidden = true;
+    $('resultBox').hidden = false;
+    const fmt = (v) => (v == null ? 'n/a' : Math.round(v) + ' ms');
+    let cls, text;
+    if (r.received === 0) { cls = 'bad'; text = 'FAIL: connected, but no replies came back.'; }
+    else if (r.lossPct <= 2 && r.p95 <= 120) { cls = 'good'; text = 'GOOD: this connection should work well for the game.'; }
+    else if (r.lossPct <= 8 && r.p95 <= 250) { cls = 'warn'; text = 'OKAY: playable, but you may notice some lag.'; }
+    else { cls = 'bad'; text = 'POOR: this connection would feel laggy or glitchy.'; }
+    $('verdict').textContent = text;
+    $('verdict').className = 'status ' + cls;
+    const typeText = {
+      'same-network': 'same network (both devices are on the same Wi-Fi)',
+      direct: 'direct over the internet (best case)',
+      relay: 'through a relay server (works, but slower, and costs money to run)',
+      unknown: 'unknown',
+    }[r.type];
+    const rows = [
+      ['Typical delay (median round trip)', fmt(r.median)],
+      ['Worst 5% delay', fmt(r.p95)],
+      ['Slowest single reply', fmt(r.max)],
+      ['Messages lost', r.lossPct + '% (' + (r.sent - r.received) + ' of ' + r.sent + ')'],
+    ];
+    const t = $('table');
+    t.textContent = '';
+    for (const [k, v] of rows) {
+      const tr = document.createElement('tr');
+      const a = document.createElement('td'); a.textContent = k;
+      const b = document.createElement('td'); b.textContent = v;
+      tr.append(a, b); t.append(tr);
+    }
+    $('explain').textContent = 'Connection type: ' + typeText + '. For the most useful test, run it with the two devices on DIFFERENT networks (for example one on Wi-Fi and one on phone data).';
+    window.__result = r;
+  }
+})();
+</script>
+</body>
+</html>

@@ -145,7 +145,7 @@ test('names are cleaned and cosmetics are range-checked', async () => {
     assert.ok(!/[<>\u0000-\u001f]/.test(me.name));
     assert.ok(me.color >= 0 && me.color <= 11);
     assert.ok(me.hat >= 0 && me.hat <= 21);
-    assert.ok(Number.isInteger(me.skin) && me.skin >= 0 && me.skin <= 11);
+    assert.ok(Number.isInteger(me.skin) && me.skin >= 0 && me.skin <= 36);
 
     // Valid choices go through, junk is ignored or clamped.
     a.emit('room:customize', { color: 11, hat: 21, skin: 3 });

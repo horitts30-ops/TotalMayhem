@@ -1,4 +1,4 @@
-# TOTAL MAYHEM  (13 minigames, Rage Bait mode, chat, stamina, public rooms, a coin shop, power-ups, achievements and music)
+# TOTAL MAYHEM  (13 minigames, 11 maps, Rage Bait mode, chat, stamina, public rooms, a coin shop, cosmetic packs, capes and hoodies, power-ups, 52 achievements and music)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
@@ -8,16 +8,12 @@ different floors), "Gold Grab", "Hot Potato", "Hill Hustle", "Prop Hunt", "Meteo
 and "Mole Stomp".** A match mixes them. Jump and shove now share one **stamina bar**, and a host can
 make a room **public** so anybody can join it from a list on the home page. Finishing rounds earns **coins** that you spend in
 the **Shop** on hats, skins and colors (cosmetics only), you can buy small one-round
-**power-ups** at a **pit stop** between rounds, and **32 achievements** unlock special hats and
-skins that coins cannot buy (all explained in section 3).
+**power-ups** at a **pit stop** between rounds, and **52 achievements** unlock special hats and
+skins that coins cannot buy (all explained in section 3). Nine of the minigames now play on **11 different floor shapes (maps)**, and there are **24 skins**.
 
 ---
 
 ## 1. Run it (5 minutes)
-
-VISIT: totalmayhem.onrender.com
-
-OR
 
 You need **Node.js 18 or newer** (you said you have it; check with `node --version`).
 
@@ -200,13 +196,33 @@ In the lobby the host can tick **Rage Bait**. It is deliberately almost unfair, 
 
 * **Shoves hit about 3x as hard**: players fly several tiles, are dizzy more than twice as long, and can be shoved again after 0.5 seconds (combos!).
 * **Everything is slippery** (steering grip is cut to 60%).
+* **No stamina**: jumping and shoving are free, so the stamina bar is hidden and you can mash both as much as you like.
 * **Every minigame is retuned to be much harder** (the numbers are in each game's `RAGE` table, plus `server/rage.js`):
   Crumble Floor's tiles fall much faster; Hot Potato has a shorter fuse and a huge explosion; Meteor Mayhem drops more, faster and bigger meteors;
   Color Call gives you about a second; Jump Rope Jam spins faster and knocks harder; Lap Dash puts a hurdle in every gap and weakens the rubber band;
   Dig Dash has far more bombs and slower digging; Mole Stomp has many more biting red moles; Hill Hustle has a smaller hill that moves every 7 seconds;
   Gold Grab has fewer coins; Crown Chaos overheats sooner; Paint Panic splats 7 tiles per shove and removes the catch-up brush; Prop Hunt hides the seeker's blindfold time shorter.
-* A red **RAGE BAIT** badge and a red glow show that it is on, the intro card warns everybody, and the public list shows a flame.
+* A red **RAGE BAIT** badge and a red glow around the whole window (not only the game picture) show that it is on, the intro card warns everybody, and the public list shows a flame.
 * It is still **fair play**: nobody is ever out for good, coins and power-ups work exactly as in a normal match (no extra rewards for suffering), and it can only be switched on or off between matches.
+
+### Maps (host setting, v0.11.0)
+
+Nine minigames (Crumble Floor, Gold Grab, Hot Potato, Hill Hustle, Prop Hunt, Meteor Mayhem, Crown Chaos,
+Paint Panic and Dig Dash) can be played on different **floor shapes**. Color Call, Jump Rope Jam, Lap Dash
+and Mole Stomp keep their own fixed arenas. In the lobby the host sees a **Map** drop-down:
+
+* **Random mix** (the default): about a third of rounds use the classic oval, the rest pick one of the 10 new maps.
+* Or pin one map for the whole match: **Classic Oval, Plus Plaza, Donut Hole, Picture Frame, Diamond Dash,
+  Hourglass, Stepping Stones, Twin Peaks, Swiss Cheese, Open Field, Tiny Table**.
+* The intro card names the map. Spawn points are spread out automatically for any number of players (2-8),
+  the Hill and the Crown start in the middle (or the nearest floor if the middle is a pit, like on Donut Hole),
+  and Crumble Floor's tiles crack starting from that map's shape. Maps work together with Rage Bait.
+* Like Rage Bait, the map can only be changed between matches.
+
+To add a map, add one entry (a 14 x 9 grid of `#` = floor and `.` = empty) to the list in `server/maps.js`.
+`tests/maps.test.js` then checks it automatically (one connected piece, enough room for 8 players, standable
+spawn points) and plays it in every minigame that uses maps. The one other place to touch is the `ALL_MAPS`
+list at the top of `public/js/achievements.js` (a test fails if the two lists differ).
 
 ### Emoji bubbles and text chat
 
@@ -327,14 +343,18 @@ away or disconnected never hold it up.
 
 ### Achievements and trophy hats (cosmetics only)
 
-Click **Trophies** on the title screen, in the lobby or on the final scoreboard to see all 32
+Click **Trophies** on the title screen, in the lobby or on the final scoreboard to see all 52
 achievements with progress bars. A pop-up appears when you unlock one. Examples: win a round,
 win a match, win each of the 13 minigames, jump 100 times, earn 10 silly titles, knock out 3
-players in one Crumble Floor round, earn 500 coins in total.
+players in one Crumble Floor round, earn 500 coins in total. The 20 newest (v0.11.0) cover maps
+(play on 5 or on all 11 maps, win on Donut Hole / Tiny Table / Stepping Stones / Swiss Cheese / Twin Peaks, win on 5 different maps),
+Rage Bait (finish a round, win a round, finish 10), chat and emoji (10 messages, 25 bubbles, all 8 emoji), win streaks,
+top-3 finishes in big rooms, and long-term totals (500 shoves, 1000 jumps, 100 rounds, 2000 coins).
 
-Ten of them give a **special hat or skin that coins cannot buy**: Laurel wreath, Golden trophy,
-Hard hat, Space helmet, Detective cap, Jester hat, and the Bubbles, Flames, Galaxy and Gold
-skins. In the Shop they show a trophy instead of a price, and tell you which achievement unlocks
+Fourteen of them give a **special hat or skin that coins cannot buy**: Laurel wreath, Golden trophy,
+Hard hat, Space helmet, Detective cap, Jester hat, and the Bubbles, Flames, Galaxy, Gold, Lava (win a Rage Bait round),
+Circuit (play on every map), Frost (win on 5 different maps) and Disco (earn 2000 coins) skins. There are also
+8 new skins you can buy with coins: Polka, Camo, Waves, Argyle, Tiger, Lightning, Cow and Confetti. In the Shop they show a trophy instead of a price, and tell you which achievement unlocks
 them. They change only how you look.
 
 * Wins and finished matches **only count when somebody else was in the room**, so you cannot
@@ -386,6 +406,32 @@ does not guess knockbacks, collisions with other players or jumps (those still w
   connection. That is normal for online games.
 * Ping itself cannot be removed by code. If the server is far away from you, the best fix is a server near you.
 
+### Back items, Packs and Outfits (v0.12.0, cosmetics only)
+
+* **Back items:** a new Shop tab and a new picker under Hat and Skin. **21 capes, cloaks and hoodies** (Red cape ... Galaxy cloak, Frog hoodie, Cat hoodie, ...).
+  Capes and cloaks hang behind you and flutter when you run; hoodies show a hood and sleeves. They are drawn on everybody's screen.
+* **Skins and hats:** 13 new skins and 30 new hats (your five collections: Disaster, Magical Nonsense, Snack Attack, Show-Off and Weird Science).
+  A few have tiny **idle animations** that are purely cosmetic: the Emergency chicken squawks "BAWK!" every few seconds, the UFO's little alien waves,
+  the Tiny crown wobbles when you fall or are dizzy, the Spinning siren flashes, the Satellite dish turns, the Noodle nest steams, the Popcorn pops.
+* **Packs** (title screen or lobby, **Packs** button). Four packs, a bit like trading-card packs. Each card is one skin, hat or back item, or a whole **Outfit**
+  (a matching skin + back item + hat). Cards are Common, Uncommon, Rare, Epic or Legendary.
+
+  | Pack | Price | Cards | Guarantee |
+  |---|---|---|---|
+  | Basic | 120 | 3 | none (mostly Common) |
+  | Super | 300 | 4 | at least 1 Uncommon |
+  | Ultra | 700 | 5 | at least 1 Rare |
+  | Legend | 1500 | 5 | at least 1 Epic (and a chance of Legendary) |
+
+  The exact odds of each pack are shown on the Packs screen. The best card is revealed last; click a card to flip it, or "Flip all".
+* **Friendly rules:** packs use only in-game coins (there is **no real money anywhere**). A card you already own pays coins back (5 / 15 / 40 / 100 / 250 by rarity, outfits pay double) -
+  never more than a small part of the price (a test checks this), so you cannot make coins by opening packs. A "lucky streak protection" counter guarantees an Epic or better
+  card after 10 packs without one. Everything is cosmetic: nothing in a pack changes how a minigame plays.
+* **The Outfit book** (bottom of the Packs screen) lists 28 outfits. Own all three pieces (pieces can come one by one or all at once) and click the outfit to wear it.
+* **A note on the old "no gambling" rule:** packs are random, so they bend it. The safeguards above (coins only, shown odds, guarantees, refunds, no pay-to-win) are why I think it
+  fits the spirit of the rule, but if you would rather not have any randomness, the shop could sell pack items for fixed coin prices instead - tell me.
+* **Where it is saved:** in your browser with the rest of your wallet. As with the Shop, someone who edits their own saved data can only give THEMSELVES items.
+
 ### Coins and the Shop (cosmetics only)
 
 * **Earning:** everybody who plays a round with others earns **10 coins**, plus the points
@@ -398,8 +444,9 @@ does not guess knockbacks, collisions with other players or jumps (those still w
   items are free from the start; the cheapest paid ones are about one match, and the best
   (the Crown hat, the Rainbow skin) take a few matches. Locked colors show a padlock, and the
   ten trophy items show a trophy (see above).
-* **It only buys looks.** Nothing in the shop changes how a minigame plays. There is no
-  gambling, no random boxes and nothing for real money.
+* **It only buys looks.** Nothing in the shop changes how a minigame plays, and nothing costs real money.
+  Since v0.12.0 there are also **cosmetic packs** (random cards, paid ONLY with coins you earn by playing) - see the next section.
+  Items that only come out of packs show a gift tag in the Shop; clicking "Find it in Packs" jumps to the packs screen.
 * **Where it is saved:** in your browser (`localStorage`), like your name and look. It stays
   on that browser and survives restarts, but it does not follow you to another device, and
   clearing the browser's site data wipes it. Because it lives in your browser, a person who
@@ -475,7 +522,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **290 automated tests** (about a minute):
+runs **340 automated tests** (about a minute and a half):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -503,6 +550,13 @@ runs **290 automated tests** (about a minute):
   counted once (reload-safe), no wins from solo practice, Hat Trick must be in one match, per-game
   wins, totals that unlock hats and skins, rewards are unlock-only and granted once, damaged saved
   data is repaired, and the server sends the fields the trophy case needs.
+* `tests/maps.test.js` (17 tests) - all 11 maps are valid, connected, have room for 8 and standable spawn points;
+  the classic map is exactly the old floor; **every map x every minigame that uses maps x Rage Bait on/off** is played with
+  8 button-mashing players and nobody may ever leave the floor; the host's pick is validated and reaches the arena info;
+  the browser's prediction rule matches the server's for every map; a real-network test picks a map and checks the match uses it.
+* `tests/v011.test.js` (15 tests) - the 24 skins, the 20 new achievements (map, Rage Bait, streak, podium, chat/emoji,
+  long-term totals), old saves still load, hostile saved data is cleaned, and **every browser script parses**
+  (a typo there would leave the title screen dead, and no other test loads `main.js`).
 * `tests/music.test.js` (8 tests) - every tune has a sensible tempo, key, chords and drums; every note is
   in a comfortable range and not silent; each tune is identical every time and loops cleanly; the melody
   never leaves its key; each tune is different from the others; every screen and every minigame has music
@@ -521,8 +575,11 @@ runs **290 automated tests** (about a minute):
 * `tests/predict.test.js` (7 tests) - the movement prediction: replays a whole round against the real server rules
   with 20-100 ms delays and checks the guess is far closer than the old method, walls, smoothing, and that every
   game's snapshot carries the steering info.
-* `tests/rage.test.js` (6 tests) - Rage Bait: shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
+* `tests/rage.test.js` (7 tests) - Rage Bait: no stamina, shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
   variant finishing in rage mode with 1-8 players, and Lap Dash's extra hurdles matching what the browser draws.
+* `tests/packs.test.js` (17 tests) - back items and catalogue sizes, your five hat collections, pack-only items (cannot be bought, all appear in a pack), outfits,
+  odds and prices, the "duplicates never make a profit" check, guarantees over thousands of random packs, pity, duplicate refunds, wallet saving and hostile saved data,
+  drawing every new cosmetic without errors, and the server keeping/clamping the back item.
 * `tests/social.test.js` (17 tests) - the Rage Bait room setting, emoji bubbles (valid, rate-limited, same-room only), the admin lock (wrong codes, lockouts, short or missing
   codes, no tokens leaked, kick/close/announce), and text chat (phases, filter, limits, history, admin switch).
 * `tests/network.test.js` (28 tests) - a real server with real WebSocket clients: rooms,
@@ -588,6 +645,7 @@ total-mayhem/
       crownChaos.js       ALL the rules of Crown Chaos
       paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
     stamina.js            the shared jump/shove stamina numbers and helpers
+    maps.js               the 11 floor shapes, spawn points and centres (add a map here)
     rage.js               Rage Bait mode physics (each game also has a RAGE table)
     admin.js              the admin panel's lock (code, lockouts)
     chat.js               chat rules: length, rate limit, swear filter
@@ -601,13 +659,15 @@ total-mayhem/
       main.js             connects everything: screens, snapshots, effects, HUD
       renderer.js         draws characters, hats, tiles, coins, bomb, hill, props, meteors, crown, goo, particles (no image files!)
       shop.js             the shop catalogue, prices and the coin wallet (no drawing, easy to test)
+      packs.js            the packs: rarities, odds, outfits, opening rules (pure rules, easy to test)
+      wardrobe.js         drawing of the back items (capes, cloaks, hoodies), pack skins and the funny hats with idle animations
       music.js            the background music: tunes as data + the player (no audio files)
-      achievements.js     the 32 achievements, counting, and which ones give a hat or skin (easy to test)
+      achievements.js     the 52 achievements, counting, and which ones give a hat or skin (easy to test)
       constants.js        colours, skin names, hat names, floor themes
       audio.js            synthesized placeholder sound effects
       input.js            keyboard handling
       net.js              Socket.IO wrapper + saved seat
-      predict.js          guesses where your own character is right now (hides ping)
+      predict.js          guesses where your own character is right now (hides ping; knows each map's floor)
   tests/
     game.test.js          Crumble Floor rules tests
     minigames.test.js     Gold Grab / Hot Potato / Hill Hustle + schedule tests
@@ -620,6 +680,9 @@ total-mayhem/
     shop.test.js          coin rewards + shop tests
     powerups.test.js      pit stop + power-up tests
     achievements.test.js  trophy case tests
+    maps.test.js          the 11 maps + their use in the minigames
+    v011.test.js          new skins, new achievements, browser scripts parse
+    packs.test.js         back items, packs, odds, outfits, wallet, server back item
     music.test.js         music tests
     network.test.js       multiplayer tests
 ```
@@ -734,7 +797,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 290 automated tests pass.
+* All 340 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -798,7 +861,35 @@ ever want coins to follow players between devices, that is the step to take.
 * I did not test public rooms across the real internet, only on one machine, and did not look at the mobile layout of the new list
   beyond checking that it fits a narrow window.
 
+**Added in v0.12.0 and how it was checked:**
+* In real headless Chromium I drew every new back item (21), skin (13) and hat (30) in the Shop preview and looked at contact sheets: capes, cloaks and hoodies are
+  visible and clearly different; the new skins are readable. I opened a Legend pack by clicking, flipped cards, saw NEW!/Duplicate labels, saw the wallet and
+  items saved across a page reload, saw "Find it in Packs" for a pack-only item, and played a Rage Bait round in a wide window: the red glow covers the whole window and
+  the stamina bar is hidden. No page errors appeared.
+* Packs: the guarantee, pity, duplicate refunds (always far below the price) and outfit rules are covered by tests, including thousands of random packs.
+* Rage Bait: a test checks that jumping and shoving work with an empty bar and spend nothing.
+
+**Not verified in v0.12.0 (please check yourself):**
+* **Pack prices, odds and refund amounts are first guesses.** I have not watched real people earn coins and open packs, so I do not know if 1500 coins for a Legend pack is too slow or too fast
+  (a 3-round match pays roughly 50-60 coins). If it feels wrong, the numbers are at the top of `public/js/packs.js` (and the coin rewards in `server/rewards.js`).
+* I looked at the idle animations only as still frames, so I have **not** seen the chicken squawk, the alien wave or the crown wobble in motion. The drawing code runs without errors for every animation state.
+* A few hats are quite small or simple (Unpaid unicorn, Satellite dish, Robot colander). Capes are mostly hidden behind your body from the front; they show best when you run.
+* I did not test two real people comparing back items across a match in this milestone beyond the server test (the back item is sent and kept like the hat and skin).
+
+**Added in v0.11.0 and how it was checked:**
+* Maps: every map in every map-using minigame, with and without Rage Bait, was played by 8 random bots for 25 simulated seconds each
+  (nobody ever left the floor). In real headless Chromium I played goldGrab on all 11 maps and one round of each other map-using minigame
+  on a map, picked the map from the lobby drop-down, and saw the correct floor drawn; a two-window game on Hourglass showed the same floor
+  to the host and the guest, and the non-host does not see the map picker. No page errors appeared.
+* Skins: all 12 new skins were drawn in the real Shop preview and looked right to me. A few (Polka, Waves, Argyle) are subtle on some colours.
+* Achievements: all 52 appear in the trophy case; the new counting rules are covered by tests. The chat/emoji counters count what YOUR browser sent.
+* A bug I made while building this (a broken line in `main.js` that killed the title screen) was caught by the real-browser run, which is
+  why there is now a test that every browser script parses.
+
 **Not verified (please check these yourself):**
+* **The new maps have not been played by real people.** Whether Tiny Table with 8 players is fun or just a pile-up, whether Stepping Stones
+  is too punishing, and whether Rage Bait on narrow maps is playable are all unknown. Maps are easy to tweak or remove in `server/maps.js`.
+* The new achievement goals and skin prices are first guesses, like the old ones.
 * I cannot play it as a human: I have **not** felt the controls,
   heard the sounds, or watched the animation at 60 frames per second. The checklist in
   section 4 covers this. **The jump distance, shove strength and crumble speed are
@@ -837,7 +928,7 @@ ever want coins to follow players between devices, that is the step to take.
 | 2. First playable minigame | Done (and it is already networked, see the reordering note below) |
 | 3. Minigame framework + more minigames | Done: shared `ArenaGame` framework + Gold Grab, Hot Potato, Hill Hustle, Prop Hunt, Meteor Mayhem, Crown Chaos |
 | 4. Online multiplayer hardening | Mostly done early; remaining: deployment testing, stress tests |
-| 5. Sabotage variety, achievements, cosmetic unlocks | **Done:** coin shop, pit-stop power-ups, 32 achievements with trophy hats and skins. Still planned: more sabotage variety |
+| 5. Sabotage variety, achievements, cosmetic unlocks | **Done:** coin shop, pit-stop power-ups, 52 achievements with trophy hats and skins. Still planned: more sabotage variety |
 | 6. Polish, prediction, touch controls, deployment guide | Planned |
 
 **Why I reordered:** the brief suggests networking in Milestone 4, but I built the first

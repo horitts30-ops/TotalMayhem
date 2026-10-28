@@ -13,17 +13,20 @@
 import { socket, request, saveSession, loadSession, clearSession } from './net.js';
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
-import { Predictor, arenaWalkable } from './predict.js';
+import { Predictor, walkableFor } from './predict.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 import { music, sceneFor } from './music.js';
-import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, THEMES, EMOTES } from './constants.js';
+import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, BACKS, THEMES, EMOTES } from './constants.js';
 import {
   KINDS, KIND_LABEL, loadWallet, saveWallet, owns, credit, buy, nextOwned, sanitizeLook,
-  catalogue, nameOf as itemName, priceOf, isUnlockOnly,
+  catalogue, nameOf as itemName, priceOf, isUnlockOnly, isPackOnly,
 } from './shop.js';
 import {
+  PACKS, OUTFITS, RARITY_LABEL, RARITY_COLOR, PITY_LIMIT, DUPE_COINS, oddsOf, openPack, outfitProgress, wearOutfit, rarityOfItem,
+} from './packs.js';
+import {
   ACHIEVEMENTS, loadTrophies, saveTrophies, emptyTrophies, recordRound, recordFinal, recordPowerRound, recordCoins,
-  recordOwned, applyRewards, achievementFor, progressOf, unlockedCount,
+  recordOwned, recordSocial, applyRewards, achievementFor, progressOf, unlockedCount,
 } from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,7 +40,7 @@ const S = {
   view: 'title',
   phaseEndsAt: 0,
   snaps: [], // recent world snapshots: { r: receivedAtMs, s: snapshot }
-  meta: new Map(), // player id -> { name, color, hat, skin }
+  meta: new Map(), // player id -> { name, color, hat, skin, back }
   wallet: loadWalletSafe(),
   trophies: loadTrophiesSafe(), // achievements (see achievements.js)
   look: null, // filled in right below (it needs the wallet)
@@ -96,6 +99,7 @@ function loadLook() {
     color: Number.isInteger(saved.color) ? saved.color % COLORS.length : ownedColors[Math.floor(Math.random() * ownedColors.length)],
     hat: Number.isInteger(saved.hat) && saved.hat >= 0 ? saved.hat % HATS.length : 0,
     skin: Number.isInteger(saved.skin) && saved.skin >= 0 ? saved.skin % SKINS.length : 0,
+    back: Number.isInteger(saved.back) && saved.back >= 0 ? saved.back % BACKS.length : 0,
   };
   // Never wear something you have not bought (e.g. an old saved look).
   return { ...look, ...sanitizeLook(S.wallet, look), name: look.name };
@@ -277,11 +281,15 @@ function mountPicker(prefix) {
   $(`${prefix}-hat-next`).addEventListener('click', () => step('hat', 1));
   $(`${prefix}-skin-prev`).addEventListener('click', () => step('skin', -1));
   $(`${prefix}-skin-next`).addEventListener('click', () => step('skin', 1));
+  $(`${prefix}-back-prev`).addEventListener('click', () => step('back', -1));
+  $(`${prefix}-back-next`).addEventListener('click', () => step('back', 1));
+  const packsBtn = $(`${prefix}-packs`);
+  if (packsBtn) packsBtn.addEventListener('click', () => openPacks());
   const shopBtn = $(`${prefix}-shop`);
   if (shopBtn) shopBtn.addEventListener('click', () => openShop());
   const troBtn = $(`${prefix}-trophies`);
   if (troBtn) troBtn.addEventListener('click', () => openTrophies());
-  pickers.push({ swatchesEl, hatEl: $(`${prefix}-hat-name`), skinEl: $(`${prefix}-skin-name`) });
+  pickers.push({ swatchesEl, hatEl: $(`${prefix}-hat-name`), skinEl: $(`${prefix}-skin-name`), backEl: $(`${prefix}-back-name`) });
 }
 
 function refreshPickers() {
@@ -292,6 +300,7 @@ function refreshPickers() {
     });
     p.hatEl.textContent = HATS[S.look.hat];
     p.skinEl.textContent = SKINS[S.look.skin];
+    p.backEl.textContent = BACKS[S.look.back];
   }
   for (const c of document.querySelectorAll('.coin-count')) c.textContent = String(S.wallet.coins);
   for (const c of document.querySelectorAll('.trophy-count')) c.textContent = `${unlockedCount(S.trophies)}/${ACHIEVEMENTS.length}`;
@@ -303,7 +312,7 @@ function lookChanged() {
   if (SHOP.open) renderShop();
   sfx.click();
   if (S.room && (S.room.phase === 'lobby' || S.room.phase === 'final')) {
-    socket.emit('room:customize', { color: S.look.color, hat: S.look.hat, skin: S.look.skin });
+    socket.emit('room:customize', { color: S.look.color, hat: S.look.hat, skin: S.look.skin, back: S.look.back });
   }
 }
 
@@ -323,7 +332,7 @@ async function createRoom() {
   $('btn-create').disabled = true;
   const res = await request(
     'room:create',
-    { name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin },
+    { name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin, back: S.look.back },
     (r) => {
       if (r.ok) enterRoom(r);
     }
@@ -342,7 +351,7 @@ async function joinRoom(forcedCode) {
   $('btn-join').disabled = true;
   const res = await request(
     'room:join',
-    { code, name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin },
+    { code, name: currentName(), color: S.look.color, hat: S.look.hat, skin: S.look.skin, back: S.look.back },
     (r) => {
       if (r.ok) enterRoom(r);
     }
@@ -354,6 +363,37 @@ async function joinRoom(forcedCode) {
 
 // ---- public rooms list (home page) -------------------------------------------
 let publicBusy = false;
+// ---- map picker (the list of maps comes from the server, so it can never drift)
+let MAP_LIST = [];
+async function loadMaps() {
+  try {
+    const res = await fetch('/api/maps');
+    const list = await res.json();
+    if (Array.isArray(list)) MAP_LIST = list.filter((m) => m && typeof m.id === 'string' && typeof m.name === 'string');
+  } catch (e) {
+    MAP_LIST = []; // no picker; the game still picks maps on its own
+  }
+  if (S.room) fillMapSelect(S.room, S.room.hostId === S.me);
+}
+function fillMapSelect(st, host) {
+  const sel = $('map-select');
+  $('map-wrap').classList.toggle('hidden', !host || MAP_LIST.length === 0);
+  if (sel.dataset.sig !== String(MAP_LIST.length)) {
+    sel.textContent = '';
+    const first = el('option', null, 'Random mix');
+    first.value = 'random';
+    sel.appendChild(first);
+    for (const m of MAP_LIST) {
+      const o = el('option', null, m.name);
+      o.value = m.id;
+      o.title = m.note || '';
+      sel.appendChild(o);
+    }
+    sel.dataset.sig = String(MAP_LIST.length);
+  }
+  sel.value = st.mapPick || 'random';
+}
+
 async function refreshPublicRooms() {
   if (publicBusy || S.view !== 'title' || !socket.connected) return;
   publicBusy = true;
@@ -481,6 +521,7 @@ function renderLobby(st) {
   maxSel.disabled = !host;
   $('public-wrap').classList.toggle('hidden', !host);
   $('public-check').checked = !!st.isPublic;
+  fillMapSelect(st, host);
   $('rage-wrap').classList.toggle('hidden', !host);
   $('rage-check').checked = !!st.rage;
 
@@ -636,7 +677,7 @@ function renderResults(st) {
     cv.width = 88;
     cv.height = 112;
     d.appendChild(cv);
-    addAvatar(cv, () => ({ color: row.color, hat: row.hat, skin: row.skin }), row.place === 1 ? 'happy' : row.survived ? 'normal' : 'dizzy');
+    addAvatar(cv, () => ({ color: row.color, hat: row.hat, skin: row.skin, back: row.back }), row.place === 1 ? 'happy' : row.survived ? 'normal' : 'dizzy');
     const who = el('div', 'who', row.id === S.me ? `${row.name} (you)` : row.name);
     if (row.abandoned) who.appendChild(el('small', null, 'left the game'));
     else if (row.title) who.appendChild(el('small', null, row.title));
@@ -667,7 +708,7 @@ function renderFinal(st) {
     cv.width = 88;
     cv.height = 112;
     d.appendChild(cv);
-    addAvatar(cv, () => ({ color: s.color, hat: s.hat, skin: s.skin }), s.place === 1 ? 'happy' : 'normal');
+    addAvatar(cv, () => ({ color: s.color, hat: s.hat, skin: s.skin, back: s.back }), s.place === 1 ? 'happy' : 'normal');
     d.appendChild(el('div', 'who', s.id === S.me ? `${s.name} (you)` : s.name));
     d.appendChild(el('div', 'pts', `${s.score}`));
     rows.appendChild(d);
@@ -769,6 +810,7 @@ const TRO = { open: false };
 
 function openTrophies() {
   TRO.open = true;
+  document.body.classList.add('modal-open');
   $('overlay-trophies').classList.remove('hidden');
   renderTrophies();
   sfx.click();
@@ -776,6 +818,7 @@ function openTrophies() {
 
 function closeTrophies() {
   TRO.open = false;
+  document.body.classList.remove('modal-open');
   $('overlay-trophies').classList.add('hidden');
 }
 
@@ -838,7 +881,7 @@ function showEarned(id, total, parts) {
   if (parts.length) box.appendChild(el('small', null, `(${parts.join(', ')})`));
 }
 
-const SHOP = { kind: 'hat', sel: { hat: 0, skin: 0, color: 0 }, open: false };
+const SHOP = { kind: 'hat', sel: { hat: 0, skin: 0, back: 0, color: 0 }, open: false };
 
 function shopLook() {
   return { ...S.look, [SHOP.kind]: SHOP.sel[SHOP.kind] };
@@ -846,6 +889,7 @@ function shopLook() {
 
 function openShop(kind, index) {
   SHOP.open = true;
+  document.body.classList.add('modal-open');
   SHOP.kind = KINDS.includes(kind) ? kind : SHOP.kind;
   for (const k of KINDS) SHOP.sel[k] = S.look[k];
   if (KINDS.includes(kind) && Number.isInteger(index)) SHOP.sel[kind] = index;
@@ -858,6 +902,7 @@ function openShop(kind, index) {
 
 function closeShop() {
   SHOP.open = false;
+  document.body.classList.remove('modal-open');
   $('overlay-shop').classList.add('hidden');
 }
 
@@ -905,7 +950,11 @@ function renderShop() {
     }
     card.appendChild(el('div', 'nm', item.name));
     const lockedByAch = !owned && isUnlockOnly(item.kind, item.index);
-    const tag = el('div', 'tag' + (lockedByAch ? ' ach' : ''), owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : lockedByAch ? (S.trophies.unlocked[(achievementFor(item.kind, item.index) || {}).id] ? 'Claim!' : 'Trophy') : String(item.price));
+    const lockedByPack = !owned && isPackOnly(item.kind, item.index);
+    const rar = rarityOfItem(item.kind, item.index);
+    if (rar >= 0) card.style.setProperty('--rar', RARITY_COLOR[rar]);
+    if (rar >= 0) card.classList.add('rar');
+    const tag = el('div', 'tag' + (lockedByAch ? ' ach' : lockedByPack ? ' pk' : ''), owned ? (wearing(item.kind, item.index) ? 'Wearing' : 'Owned') : lockedByAch ? (S.trophies.unlocked[(achievementFor(item.kind, item.index) || {}).id] ? 'Claim!' : 'Trophy') : lockedByPack ? 'Pack' : String(item.price));
     card.appendChild(tag);
     card.addEventListener('click', () => {
       SHOP.sel[item.kind] = item.index;
@@ -952,6 +1001,14 @@ function renderShop() {
       }
       $('shop-item').appendChild(hint);
     }
+  } else if (isPackOnly(kind, idx)) {
+    const r = rarityOfItem(kind, idx);
+    act.textContent = '\u{1F381} Find it in Packs';
+    act.disabled = false;
+    const hint = el('div', 'shop-hint');
+    hint.appendChild(el('b', null, `${r >= 0 ? RARITY_LABEL[r] : 'Pack'} item: `));
+    hint.appendChild(document.createTextNode('only comes out of packs. Open one for a chance at it!'));
+    $('shop-item').appendChild(hint);
   } else if (S.wallet.coins >= price) {
     act.textContent = `Buy for ${price} coins`;
     act.disabled = false;
@@ -980,6 +1037,10 @@ function shopAction() {
     afterUnlocks(recordOwned(S.trophies, S.wallet));
     msg.textContent = given.length ? 'Reward claimed! Now wearing it.' : 'Now wearing it.';
     msg.classList.add('good');
+  } else if (!owns(S.wallet, kind, idx) && isPackOnly(kind, idx)) {
+    closeShop();
+    openPacks();
+    return;
   } else if (!owns(S.wallet, kind, idx)) {
     const res = buy(S.wallet, kind, idx);
     if (!res.ok) {
@@ -1002,6 +1063,207 @@ function shopAction() {
   renderShop();
 }
 
+
+// =============================================================== packs
+const PK = { open: false, reveal: null, lastPack: null };
+
+function openPacks() {
+  PK.open = true;
+  document.body.classList.add('modal-open');
+  $('overlay-packs').classList.remove('hidden');
+  renderPacks();
+  sfx.click();
+}
+
+function closePacks() {
+  PK.open = false;
+  document.body.classList.remove('modal-open');
+  $('overlay-packs').classList.add('hidden');
+}
+
+function pct(n) {
+  return n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+}
+
+function renderPacks() {
+  $('packs-coins').textContent = String(S.wallet.coins);
+  const list = $('pack-list');
+  list.textContent = '';
+  PACKS.forEach((pack, i) => {
+    const card = el('div', 'pack-card');
+    card.style.setProperty('--tier', RARITY_COLOR[Math.min(4, i + 1)]);
+    card.appendChild(el('div', 'pack-icon', pack.icon));
+    card.appendChild(el('div', 'pack-name', pack.name));
+    card.appendChild(el('div', 'pack-meta', `${pack.cards} cards`));
+    const odds = el('div', 'pack-odds');
+    oddsOf(pack).forEach((o, r) => {
+      if (o <= 0) return;
+      const chip = el('span', 'odds-chip', `${RARITY_LABEL[r]} ${pct(o)}%`);
+      chip.style.setProperty('--rar', RARITY_COLOR[r]);
+      odds.appendChild(chip);
+    });
+    card.appendChild(odds);
+    card.appendChild(el('div', 'pack-guar', pack.min > 0 ? `At least 1 ${RARITY_LABEL[pack.min]} or better` : 'Chance for rare finds'));
+    const btn = el('button', 'btn small', `Open for ${pack.price}`);
+    btn.type = 'button';
+    const need = pack.price - S.wallet.coins;
+    if (need > 0) {
+      btn.textContent = `Need ${need} more coins`;
+      btn.disabled = true;
+    }
+    btn.addEventListener('click', () => startReveal(pack.id));
+    card.appendChild(btn);
+    list.appendChild(card);
+  });
+
+  const left = Math.max(0, PITY_LIMIT - (S.wallet.pity || 0));
+  $('pack-pity').textContent = (S.wallet.pity || 0) >= PITY_LIMIT
+    ? 'Lucky streak protection: your next pack is guaranteed to have an Epic or better card!'
+    : `Lucky streak protection: if ${left} more pack${left === 1 ? '' : 's'} bring no Epic or better, the next one is guaranteed to have one. Packs opened so far: ${S.wallet.packs || 0}.`;
+
+  const grid = $('outfit-grid');
+  grid.textContent = '';
+  let complete = 0;
+  for (const outfit of OUTFITS) {
+    const prog = outfitProgress(S.wallet, outfit);
+    if (prog.complete) complete++;
+    const card = el('button', 'shop-card rar' + (prog.complete ? '' : ' locked'));
+    card.type = 'button';
+    card.style.setProperty('--rar', RARITY_COLOR[outfit.rarity]);
+    const cv = el('canvas');
+    cv.width = 64;
+    cv.height = 80;
+    card.appendChild(cv);
+    drawPreview(cv, { ...S.look, skin: outfit.skin, back: outfit.back, hat: outfit.hat }, 0);
+    card.appendChild(el('div', 'nm', outfit.name));
+    card.appendChild(el('div', 'tag' + (prog.complete ? '' : ' pk'), prog.complete ? 'Wear' : `${prog.have}/3 pieces`));
+    card.addEventListener('click', () => {
+      if (!prog.complete) {
+        $('pack-pity').textContent = `${outfit.name}: collect all 3 pieces (skin, back item and hat) - you have ${prog.have}. Packs can drop the pieces one by one, or the whole outfit at once.`;
+        return;
+      }
+      const look = wearOutfit(S.wallet, S.look, outfit);
+      if (look) {
+        S.look = { ...S.look, skin: look.skin, back: look.back, hat: look.hat };
+        lookChanged();
+        sfx.jackpot();
+        $('pack-pity').textContent = `Now wearing ${outfit.name}!`;
+      }
+    });
+    grid.appendChild(card);
+  }
+  $('outfit-count').textContent = `${complete}/${OUTFITS.length} complete`;
+}
+
+function cardPreviewLook(c) {
+  if (c.type === 'outfit') return { ...S.look, skin: c.outfit.skin, back: c.outfit.back, hat: c.outfit.hat };
+  return { ...S.look, [c.kind]: c.index };
+}
+
+function cardTitle(c) {
+  return c.type === 'outfit' ? c.outfit.name : itemName(c.kind, c.index);
+}
+
+function cardKindLabel(c) {
+  return c.type === 'outfit' ? 'Outfit' : KIND_LABEL[c.kind].replace(/s$/, '');
+}
+
+function startReveal(packId) {
+  const res = openPack(S.wallet, packId);
+  if (!res.ok) {
+    $('pack-pity').textContent = res.error;
+    renderPacks();
+    return;
+  }
+  saveWalletNow();
+  afterUnlocks(recordOwned(S.trophies, S.wallet));
+  PK.lastPack = packId;
+  PK.reveal = { res, flipped: res.cards.map(() => false) };
+  $('overlay-reveal').classList.remove('hidden');
+  $('reveal-title').textContent = res.pack.name;
+  $('reveal-hint').textContent = 'Click a card to flip it! The best one is last.';
+  $('reveal-summary').textContent = '';
+  $('reveal-again').classList.add('hidden');
+  $('reveal-all').classList.remove('hidden');
+  const wrap = $('reveal-cards');
+  wrap.textContent = '';
+  res.cards.forEach((c, i) => {
+    const card = el('button', 'rv-card');
+    card.type = 'button';
+    card.style.setProperty('--rar', RARITY_COLOR[c.rarity]);
+    const inner = el('div', 'rv-inner');
+    const back = el('div', 'rv-face rv-back', '?');
+    const front = el('div', 'rv-face rv-front');
+    front.appendChild(el('div', 'rv-rarity', RARITY_LABEL[c.rarity]));
+    const cv = el('canvas');
+    cv.width = 96;
+    cv.height = 120;
+    front.appendChild(cv);
+    front.appendChild(el('div', 'rv-kind', cardKindLabel(c)));
+    front.appendChild(el('div', 'rv-name', cardTitle(c)));
+    front.appendChild(el('div', 'rv-new' + (c.isNew ? '' : ' dupe'), c.isNew
+      ? (c.type === 'outfit' && c.newPieces.length < 3 ? `NEW! ${c.newPieces.length} new piece${c.newPieces.length === 1 ? '' : 's'}` : 'NEW!')
+      : `Duplicate +${c.refund} coins`));
+    inner.appendChild(back);
+    inner.appendChild(front);
+    card.appendChild(inner);
+    card.addEventListener('click', () => flipCard(i, card, cv, c));
+    wrap.appendChild(card);
+    card._draw = () => drawPreview(cv, cardPreviewLook(c), 0);
+  });
+  sfx.click();
+}
+
+function flipCard(i, card, cv, c) {
+  const R = PK.reveal;
+  if (!R || R.flipped[i]) return;
+  R.flipped[i] = true;
+  card.classList.add('flipped');
+  card._draw();
+  if (c.rarity >= 3) {
+    card.classList.add('shine');
+    sfx.jackpot();
+  } else if (c.isNew) sfx.coin(0.8);
+  else sfx.click();
+  if (R.flipped.every(Boolean)) finishReveal();
+}
+
+function finishReveal() {
+  const R = PK.reveal;
+  if (!R) return;
+  const { res } = R;
+  const fresh = res.cards.filter((c) => c.isNew).length;
+  const parts = [`${fresh} new`];
+  if (res.refund > 0) parts.push(`+${res.refund} coins back for duplicates`);
+  $('reveal-summary').textContent = parts.join(' - ');
+  $('reveal-hint').textContent = res.pityUsed ? 'Lucky streak protection kicked in!' : 'All flipped!';
+  $('reveal-all').classList.add('hidden');
+  const again = $('reveal-again');
+  again.classList.remove('hidden');
+  const pack = res.pack;
+  if (S.wallet.coins >= pack.price) {
+    again.textContent = `Open another (${pack.price})`;
+    again.disabled = false;
+  } else {
+    again.textContent = `Need ${pack.price - S.wallet.coins} more coins`;
+    again.disabled = true;
+  }
+}
+
+function closeReveal() {
+  // Cards you have not flipped are already yours; just show them all before leaving.
+  PK.reveal = null;
+  $('overlay-reveal').classList.add('hidden');
+  if (PK.open) renderPacks();
+}
+
+function flipAll() {
+  const cards = $('reveal-cards').children;
+  const R = PK.reveal;
+  if (!R) return;
+  Array.from(cards).forEach((card, i) => flipCard(i, card, null, R.res.cards[i]));
+}
+
 // =============================================================== room state
 function applyRoomState(st) {
   const prev = S.room;
@@ -1009,7 +1271,7 @@ function applyRoomState(st) {
   syncRoomExtras();
   if (!prev) loadChatHistory();
   S.phaseEndsAt = performance.now() + st.endsInMs;
-  for (const p of st.players) S.meta.set(p.id, { name: p.name, color: p.color, hat: p.hat, skin: p.skin });
+  for (const p of st.players) S.meta.set(p.id, { name: p.name, color: p.color, hat: p.hat, skin: p.skin, back: p.back });
 
   // If the server says we are not in this room any more, go back to the title.
   if (S.me && !st.players.some((p) => p.id === S.me)) {
@@ -1156,6 +1418,7 @@ function setupChat() {
     if (res && res.ok) {
       input.value = '';
       $('chat-note').textContent = '';
+      afterUnlocks(recordSocial(S.trophies, 'chat'));
     } else {
       $('chat-note').textContent = (res && res.error) || 'Could not send.';
     }
@@ -1187,6 +1450,7 @@ function sendEmote(i) {
   if (now - lastEmoteSent < 600) return; // the server also limits this
   lastEmoteSent = now;
   socket.emit('chat:emoji', i);
+  afterUnlocks(recordSocial(S.trophies, 'emoji', i));
 }
 
 function setupEmotes() {
@@ -1783,7 +2047,7 @@ function sampleFrame(now) {
         now,
         recvAt: latest.r,
         rtt: S.net.ping == null ? 60 : S.net.ping,
-        walkable: latest.s.gid === 'crumbleFloor' ? null : arenaWalkable,
+        walkable: latest.s.gid === 'crumbleFloor' ? null : walkableFor(S.room && S.room.arena && S.room.arena.floor),
       });
       if (guess) {
         const airborne = Math.max(0, p.z + p.vz * ahead);
@@ -1853,7 +2117,8 @@ function updateHud(frame) {
 
   // Stamina (jump and shove share it). Tick marks show the price of each move.
   const stam = $('stamina');
-  if (mine && mine.sm > 0 && mine.st === 'alive') {
+  const noStamina = !!(S.room && S.room.rage); // Rage Bait: no stamina at all
+  if (mine && mine.sm > 0 && mine.st === 'alive' && !noStamina) {
     stam.classList.remove('hidden');
     $('stamina-fill').style.transform = `scaleX(${Math.max(0, Math.min(1, mine.sp / mine.sm)).toFixed(3)})`;
     stam.classList.toggle('low', mine.sp < Math.min(arena.jumpCost || 25, arena.shoveCost || 35));
@@ -2032,8 +2297,21 @@ function bindUi() {
   $('overlay-shop').addEventListener('pointerdown', (e) => {
     if (e.target === $('overlay-shop')) closeShop();
   });
+  $('packs-close').addEventListener('click', closePacks);
+  $('overlay-packs').addEventListener('pointerdown', (e) => {
+    if (e.target === $('overlay-packs')) closePacks();
+  });
+  $('reveal-done').addEventListener('click', closeReveal);
+  $('reveal-all').addEventListener('click', flipAll);
+  $('reveal-again').addEventListener('click', () => {
+    const id = PK.lastPack;
+    closeReveal();
+    if (id) startReveal(id);
+  });
   addAvatar($('shop-canvas'), () => shopLook());
   window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && PK.reveal) closeReveal();
+    else if (e.key === 'Escape' && PK.open) closePacks();
     if (e.key === 'Escape' && SHOP.open) closeShop();
     if (e.key === 'Escape' && TRO.open) closeTrophies();
     if (e.key === 'F3') {
@@ -2083,12 +2361,20 @@ function bindUi() {
       e.target.checked = !e.target.checked;
       toast(res.error || 'Could not change that.');
     } else {
-      toast(res.rage ? 'RAGE BAIT is on. Shoves are huge and everything is harder!' : 'Rage Bait is off. Back to normal.');
+      toast(res.rage ? 'RAGE BAIT is on. Shoves are huge, everything is harder, and there is no stamina!' : 'Rage Bait is off. Back to normal.');
     }
   });
   setupEmotes();
   setupChat();
   setupAdmin();
+  $('map-select').addEventListener('change', async (e) => {
+    const res = await request('room:map', e.target.value);
+    if (!res.ok) {
+      toast(res.error || 'Could not change that.');
+      if (S.room) e.target.value = S.room.mapPick || 'random';
+    }
+  });
+  loadMaps();
   $('max-select').addEventListener('change', async (e) => {
     const res = await request('room:max', Number(e.target.value));
     if (!res.ok) {

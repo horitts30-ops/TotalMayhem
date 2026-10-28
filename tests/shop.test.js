@@ -61,13 +61,13 @@ test('shop: a fresh wallet owns exactly the free items and has no coins', async 
   assert.ok(shop.owns(w, 'skin', 0), 'Plain is free');
 });
 
-test('shop: prices line up with the catalogue sizes; only -1 ("unlock only") is ever negative', async () => {
+test('shop: prices line up with the catalogue sizes; only -1 ("unlock only") and -2 ("pack only") are ever negative', async () => {
   const shop = await loadShop();
   const cfg = require('../server/config');
   assert.equal(shop.countOf('hat'), cfg.HAT_COUNT);
   assert.equal(shop.countOf('skin'), cfg.SKIN_COUNT);
   assert.equal(shop.countOf('color'), cfg.COLOR_COUNT);
-  for (const k of shop.KINDS) for (const it of shop.catalogue(k)) assert.ok(Number.isInteger(it.price) && (it.price >= 0 || it.price === shop.UNLOCK_ONLY));
+  for (const k of shop.KINDS) for (const it of shop.catalogue(k)) assert.ok(Number.isInteger(it.price) && (it.price >= 0 || it.price === shop.UNLOCK_ONLY || it.price === shop.PACK_ONLY));
 });
 
 test('shop: buying takes the exact price, adds the item and refuses when too poor', async () => {
@@ -181,7 +181,7 @@ test('shop: unlock-only items cannot be bought with any number of coins, but can
   shop.credit(w, 99999, 'rich');
   const unlockOnly = [];
   for (const k of shop.KINDS) for (const it of shop.catalogue(k)) if (it.price === shop.UNLOCK_ONLY) unlockOnly.push(it);
-  assert.equal(unlockOnly.length, 10, '6 hats + 4 skins are earned, not bought');
+  assert.equal(unlockOnly.length, 14, '6 hats + 8 skins are earned, not bought');
   for (const it of unlockOnly) {
     assert.equal(shop.owns(w, it.kind, it.index), false, `${it.name} is not owned by default`);
     const res = shop.buy(w, it.kind, it.index);

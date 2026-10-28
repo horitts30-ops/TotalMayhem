@@ -68,7 +68,7 @@ class HillHustle extends ArenaGame {
     this.cfg = { ...TUNING, ...VARIANTS[id] };
     if (this.rage) Object.assign(this.cfg, RAGE);
 
-    this.zone = { x: ArenaGame.WORLD_W / 2, y: ArenaGame.WORLD_H / 2 };
+    this.zone = { x: this.center.x, y: this.center.y };
     this.glide = null; // { fromX, fromY, toX, toY, t }
     this.next = null; // { x, y } shown as a warning
     this.nextMoveAt = this.cfg.moveEvery;
@@ -209,4 +209,5 @@ HillHustle.TUNING = TUNING;
 HillHustle.RAGE = RAGE;
 HillHustle.VARIANTS = VARIANTS;
 
+HillHustle.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = HillHustle;

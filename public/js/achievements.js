@@ -23,9 +23,14 @@ const ALL_GAMES = [
   'paintPanic', 'colorCall', 'jumpRope', 'lapDash', 'digDash', 'moleStomp',
 ];
 
+// Every map id (server/maps.js; tests/maps.test.js checks this list stays in sync).
+export const ALL_MAPS = ['classic', 'plus', 'donut', 'frame', 'diamond', 'hourglass', 'stones', 'peaks', 'cheese', 'field', 'table'];
+
 // `value(stats)` says how far along you are, `goal` is what finishes it.
 // `reward` is an optional special cosmetic: { kind: 'hat' | 'skin', index }.
 const won = (id) => (s) => (s.wonGames[id] ? 1 : 0);
+const wonOn = (id) => (s) => (s.winMaps[id] ? 1 : 0);
+const count = (o) => Object.keys(o).length;
 
 export const ACHIEVEMENTS = [
   { id: 'first_round', icon: '\u{1F423}', name: 'First Steps', desc: 'Finish your first round.', goal: 1, value: (s) => s.rounds },
@@ -60,6 +65,28 @@ export const ACHIEVEMENTS = [
   { id: 'piggy', icon: '\u{1F437}', name: 'Piggy Bank', desc: 'Earn 500 coins in total.', goal: 500, value: (s) => s.coins, reward: { kind: 'skin', index: 11 } },
   { id: 'marathon', icon: '\u{1F3C3}', name: 'Marathon', desc: 'Finish 10 matches with other players.', goal: 10, value: (s) => s.matches },
   { id: 'full_house', icon: '\u{1F3E0}', name: 'Full House', desc: 'Play a match with 6 or more players.', goal: 6, value: (s) => s.biggestMatch },
+
+  // ---- v0.11: maps, Rage Bait, chat and more
+  { id: 'map_hopper', icon: '\u{1F9ED}', name: 'Map Hopper', desc: 'Play rounds on 5 different maps.', goal: 5, value: (s) => count(s.playedMaps) },
+  { id: 'cartographer', icon: '\u{1F5FA}️', name: 'Cartographer', desc: 'Play a round on every map.', goal: ALL_MAPS.length, value: (s) => count(s.playedMaps), reward: { kind: 'skin', index: 21 } },
+  { id: 'home_advantage', icon: '\u{1F3DF}️', name: 'Home Advantage', desc: 'Win rounds on 5 different maps.', goal: 5, value: (s) => count(s.winMaps), reward: { kind: 'skin', index: 22 } },
+  { id: 'win_donut', icon: '\u{1F369}', name: 'Donut Champion', desc: 'Win a round on Donut Hole.', goal: 1, value: wonOn('donut') },
+  { id: 'win_table', icon: '\u{1F37D}️', name: 'Tiny Table Titan', desc: 'Win a round on Tiny Table.', goal: 1, value: wonOn('table') },
+  { id: 'win_stones', icon: '\u{1FAA8}', name: 'Stone Skipper', desc: 'Win a round on Stepping Stones.', goal: 1, value: wonOn('stones') },
+  { id: 'win_cheese', icon: '\u{1F9C0}', name: 'Say Cheese', desc: 'Win a round on Swiss Cheese.', goal: 1, value: wonOn('cheese') },
+  { id: 'win_peaks', icon: '\u{1F3D4}️', name: 'Peak Performer', desc: 'Win a round on Twin Peaks.', goal: 1, value: wonOn('peaks') },
+  { id: 'rage_play', icon: '\u{1F525}', name: 'Brave Soul', desc: 'Finish a round of Rage Bait.', goal: 1, value: (s) => s.rageRounds },
+  { id: 'rage_win', icon: '\u{1F621}', name: 'Rage Champion', desc: 'Win a Rage Bait round against other players.', goal: 1, value: (s) => s.rageWins, reward: { kind: 'skin', index: 20 } },
+  { id: 'rage_veteran', icon: '\u{1F9E8}', name: 'Cool Under Fire', desc: 'Finish 10 rounds of Rage Bait.', goal: 10, value: (s) => s.rageRounds },
+  { id: 'chatty', icon: '\u{1F4AC}', name: 'Chatterbox', desc: 'Send 10 chat messages.', goal: 10, value: (s) => s.chats },
+  { id: 'emoji_fan', icon: '\u{1F604}', name: 'Emoji Enthusiast', desc: 'Send 25 emoji bubbles.', goal: 25, value: (s) => s.emojis },
+  { id: 'emoji_all', icon: '\u{1F3AD}', name: 'Full Expression', desc: 'Use every emoji bubble at least once.', goal: 8, value: (s) => count(s.emotesUsed) },
+  { id: 'heavyweight', icon: '\u{1F94A}', name: 'Heavyweight', desc: 'Shove 500 times in total.', goal: 500, value: (s) => s.shoves },
+  { id: 'trampoline', icon: '\u{1F938}', name: 'Trampoline', desc: 'Jump 1000 times in total.', goal: 1000, value: (s) => s.jumps },
+  { id: 'veteran', icon: '\u{1F396}️', name: 'Round Veteran', desc: 'Finish 100 rounds.', goal: 100, value: (s) => s.rounds },
+  { id: 'on_a_roll', icon: '\u{1F3B2}', name: 'On a Roll', desc: 'Win 3 rounds in a row against other players.', goal: 3, value: (s) => s.bestStreak },
+  { id: 'podium', icon: '\u{1F949}', name: 'Podium Regular', desc: 'Finish in the top 3 of 20 rounds with 4 or more players.', goal: 20, value: (s) => s.podiums },
+  { id: 'hoarder', icon: '\u{1F4B0}', name: 'Coin Hoarder', desc: 'Earn 2000 coins in total.', goal: 2000, value: (s) => s.coins, reward: { kind: 'skin', index: 23 } },
 ];
 
 const BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
@@ -74,6 +101,7 @@ export function achievementFor(kind, index) {
 const COUNTERS = [
   'rounds', 'roundWins', 'matches', 'matchWins', 'jumps', 'shoves', 'hits', 'menaceRounds',
   'untouchable', 'titles', 'powerRounds', 'coins', 'bestMatchWins', 'biggestMatch', 'owned',
+  'rageRounds', 'rageWins', 'chats', 'emojis', 'podiums', 'streak', 'bestStreak',
 ];
 
 export function emptyTrophies() {
@@ -90,6 +118,9 @@ export function normalizeTrophies(raw) {
   if (rs.wonGames && typeof rs.wonGames === 'object') {
     for (const g of ALL_GAMES) if (rs.wonGames[g] === true) stats.wonGames[g] = true;
   }
+  stats.playedMaps = keepKeys(rs.playedMaps, ALL_MAPS);
+  stats.winMaps = keepKeys(rs.winMaps, ALL_MAPS);
+  stats.emotesUsed = keepKeys(rs.emotesUsed, ['0', '1', '2', '3', '4', '5', '6', '7']);
   const unlocked = {};
   if (r.unlocked && typeof r.unlocked === 'object') {
     for (const a of ACHIEVEMENTS) {
@@ -102,6 +133,13 @@ export function normalizeTrophies(raw) {
     ? { matchId: r.current.matchId, wins: Number.isFinite(r.current.wins) ? Math.max(0, Math.floor(r.current.wins)) : 0 }
     : { matchId: '', wins: 0 };
   return { stats, unlocked, counted, current: cur };
+}
+
+// A saved { key: true } object, reduced to the keys that are allowed.
+function keepKeys(raw, allowed) {
+  const out = {};
+  if (raw && typeof raw === 'object') for (const k of allowed) if (raw[k] === true) out[k] = true;
+  return out;
 }
 
 export function loadTrophies(storage) {
@@ -156,6 +194,21 @@ export function recordRound(tro, round, row, now = Date.now()) {
   if (company && row.title) s.titles += 1;
   if (row.title === 'Untouchable' && company) s.untouchable += 1;
   if (round.game === 'crumbleFloor' && company && clampCount(row.kos) >= 3) s.menaceRounds += 1;
+  if (ALL_MAPS.includes(round.map)) s.playedMaps[round.map] = true;
+  if (round.rage === true) {
+    s.rageRounds += 1;
+    if (company && row.place === 1) s.rageWins += 1;
+  }
+  if (company) {
+    if (row.place === 1) {
+      s.streak += 1;
+      s.bestStreak = Math.max(s.bestStreak, s.streak);
+    } else {
+      s.streak = 0;
+    }
+    if ((round.players || 0) >= 4 && Number.isInteger(row.place) && row.place <= 3) s.podiums += 1;
+  }
+  if (company && row.place === 1 && ALL_MAPS.includes(round.map)) s.winMaps[round.map] = true;
   if (company && row.place === 1) {
     s.roundWins += 1;
     if (ALL_GAMES.includes(round.game)) s.wonGames[round.game] = true;
@@ -176,6 +229,17 @@ export function recordFinal(tro, final, place, now = Date.now()) {
     tro.stats.biggestMatch = Math.max(tro.stats.biggestMatch, players);
     if (place === 1) tro.stats.matchWins += 1;
   }
+  return evaluate(tro, now);
+}
+
+// You sent a chat message (kind 'chat') or an emoji bubble (kind 'emoji', `index` = which one).
+export function recordSocial(tro, kind, index, now = Date.now()) {
+  const s = tro.stats;
+  if (kind === 'chat') s.chats = Math.min(1e9, s.chats + 1);
+  else if (kind === 'emoji') {
+    s.emojis = Math.min(1e9, s.emojis + 1);
+    if (Number.isInteger(index) && index >= 0 && index < 8) s.emotesUsed[String(index)] = true;
+  } else return [];
   return evaluate(tro, now);
 }
 

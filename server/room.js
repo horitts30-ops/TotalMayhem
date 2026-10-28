@@ -18,6 +18,7 @@ const games = require('./games');
 const { roundReward, finalReward } = require('./rewards');
 const powerups = require('./powerups');
 const chat = require('./chat');
+const { MAP_IDS, getMap, chooseMap } = require('./maps');
 
 class Room {
   constructor(io, code, cfg, gameOptions) {
@@ -33,6 +34,8 @@ class Room {
     this.chatSeq = 0;
     this.rage = false; // Rage Bait mode (see server/rage.js): the host switches it on in the lobby
     this.maxPlayers = cfg.MAX_PLAYERS; // the host can lower this in the lobby
+    this.mapPick = 'random'; // the host's map choice: 'random' or a map id (see server/maps.js)
+    this.mapId = null; // the map used in the current round (null = this minigame has its own fixed arena)
 
     this.phase = 'lobby';
     this.phaseEndsAt = 0;
@@ -90,6 +93,7 @@ class Room {
       color: safeInt(info.color, 0, this.cfg.COLOR_COUNT - 1, 0),
       hat: safeInt(info.hat, 0, this.cfg.HAT_COUNT - 1, 0),
       skin: safeInt(info.skin, 0, this.cfg.SKIN_COUNT - 1, 0),
+      back: safeInt(info.back, 0, this.cfg.BACK_COUNT - 1, 0),
       ready: false,
       connected: true,
       socketId: null,
@@ -155,6 +159,7 @@ class Room {
     if (data.color !== undefined) p.color = safeInt(data.color, 0, this.cfg.COLOR_COUNT - 1, p.color);
     if (data.hat !== undefined) p.hat = safeInt(data.hat, 0, this.cfg.HAT_COUNT - 1, p.hat);
     if (data.skin !== undefined) p.skin = safeInt(data.skin, 0, this.cfg.SKIN_COUNT - 1, p.skin);
+    if (data.back !== undefined) p.back = safeInt(data.back, 0, this.cfg.BACK_COUNT - 1, p.back);
     this.broadcastState();
   }
 
@@ -178,6 +183,16 @@ class Room {
     if (playerId !== this.hostId) return 'Only the host can change that.';
     if (this.phase !== 'lobby' && this.phase !== 'final') return 'You can only change that between matches.';
     this.rage = on === true;
+    this.broadcastState();
+    return null;
+  }
+
+  // The host picks the floor shape for the maps-capable minigames ('random' = a mix).
+  setMap(playerId, pick) {
+    if (playerId !== this.hostId) return 'Only the host can change that.';
+    if (this.phase !== 'lobby' && this.phase !== 'final') return 'You can only change that between matches.';
+    if (pick !== 'random' && !MAP_IDS.includes(pick)) return 'No such map.';
+    this.mapPick = pick;
     this.broadcastState();
     return null;
   }
@@ -287,8 +302,20 @@ class Room {
     this.round += 1;
     this.slot = this.schedule[this.round - 1];
     this.intro = games.describeSlot(this.slot);
-    if (this.rage) this.intro = { ...this.intro, instructions: ['RAGE BAIT: shoves launch you across the arena and everything is harder. Good luck!', ...this.intro.instructions] };
+    if (this.rage) {
+      // Rage Bait has no stamina, so drop any instruction line that talks about it.
+      const rest = this.intro.instructions.filter((line) => !/stamina/i.test(line));
+      this.intro = { ...this.intro, instructions: ['RAGE BAIT: shoves launch you across the arena, everything is harder, and there is no stamina. Good luck!', ...rest] };
+    }
     this.arena = games.arenaFor(this.slot, { rage: this.rage });
+    this.mapId = null;
+    if (games.usesMaps(this.slot)) {
+      const rng = this.gameOptions.rng || Math.random;
+      this.mapId = chooseMap(this.mapPick, rng);
+      const map = getMap(this.mapId);
+      this.arena = { ...this.arena, floor: map.rows, mapId: map.id, mapName: map.name };
+      if (map.id !== 'classic') this.intro = { ...this.intro, instructions: [`MAP: ${map.name} - ${map.note}`, ...this.intro.instructions] };
+    }
     this.game = null;
     this.participants = new Set();
     this.results = null;
@@ -310,7 +337,7 @@ class Room {
       const pl = this.players.get(p.id);
       if (pl && pl.power.length) mods[p.id] = powerups.combine(pl.power.map((x) => x.id));
     }
-    this.game = games.createGame(this.slot, participants, { ...this.gameOptions, mods, rage: this.rage });
+    this.game = games.createGame(this.slot, participants, { ...this.gameOptions, mods, rage: this.rage, mapId: this.mapId });
     this.phase = 'playing';
     this.finishAt = 0;
     this.phaseEndsAt = 0;
@@ -338,6 +365,7 @@ class Room {
         color: p ? p.color : 0,
         hat: p ? p.hat : 0,
         skin: p ? p.skin : 0,
+        back: p ? p.back : 0,
         total: p ? p.score : 0,
       };
     });
@@ -347,6 +375,8 @@ class Room {
       rounds: this.rounds,
       game: this.slot ? this.slot.game : '', // lets the browser's trophy case know which minigame this was
       variant: this.slot ? this.slot.variant : '',
+      map: this.mapId || '',
+      rage: this.rage,
       players: rows.filter((r) => !r.abandoned).length,
       rows: outRows,
     };
@@ -357,7 +387,7 @@ class Room {
 
   beginFinal() {
     const list = [...this.players.values()]
-      .map((p) => ({ id: p.id, name: p.name, color: p.color, hat: p.hat, skin: p.skin, score: p.score, connected: p.connected }))
+      .map((p) => ({ id: p.id, name: p.name, color: p.color, hat: p.hat, skin: p.skin, back: p.back, score: p.score, connected: p.connected }))
       .sort((a, b) => b.score - a.score);
     let place = 1;
     list.forEach((e, i) => {
@@ -510,6 +540,7 @@ class Room {
       hostId: this.hostId,
       isPublic: this.isPublic,
       rage: this.rage,
+      mapPick: this.mapPick,
       phase: this.phase,
       round: this.round,
       rounds: this.rounds,
@@ -525,6 +556,7 @@ class Room {
         color: p.color,
         hat: p.hat,
         skin: p.skin,
+        back: p.back,
         ready: p.ready,
         connected: p.connected,
         score: p.score,

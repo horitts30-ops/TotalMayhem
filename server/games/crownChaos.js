@@ -69,7 +69,7 @@ class CrownChaos extends ArenaGame {
     this.cfg = { ...TUNING, ...VARIANTS[id] };
     if (this.rage) Object.assign(this.cfg, RAGE);
 
-    this.crown = { x: ArenaGame.WORLD_W / 2, y: ArenaGame.WORLD_H / 2, vx: 0, vy: 0, holder: null, heat: 0, lockId: null, lockUntil: 0 };
+    this.crown = { x: this.center.x, y: this.center.y, vx: 0, vy: 0, holder: null, heat: 0, lockId: null, lockUntil: 0 };
     for (const p of this.players.values()) {
       p.held = 0; // seconds wearing the crown
       p.grabs = 0;
@@ -128,9 +128,9 @@ class CrownChaos extends ArenaGame {
     if (c.vx === 0 && c.vy === 0) return;
     const nx = c.x + c.vx * dt;
     const ny = c.y + c.vy * dt;
-    if (ArenaGame.walkable(nx, c.y)) c.x = nx;
+    if (this.canStand(nx, c.y)) c.x = nx;
     else c.vx = -c.vx * 0.5;
-    if (ArenaGame.walkable(c.x, ny)) c.y = ny;
+    if (this.canStand(c.x, ny)) c.y = ny;
     else c.vy = -c.vy * 0.5;
     const decay = Math.exp(-this.cfg.scatterFriction * dt);
     c.vx *= decay;
@@ -243,4 +243,5 @@ CrownChaos.TUNING = TUNING;
 CrownChaos.RAGE = RAGE;
 CrownChaos.VARIANTS = VARIANTS;
 
+CrownChaos.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = CrownChaos;

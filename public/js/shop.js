@@ -2,8 +2,9 @@
 // shop.js - the wallet and the shop catalogue. No drawing and no network here,
 // just rules, so it is easy to test (see tests/shop.test.js).
 //
-// IMPORTANT: coins only buy COSMETICS (hats, skins, colours). Nothing in the
-// shop changes how a minigame plays, and there is no gambling of any kind.
+// IMPORTANT: coins only buy COSMETICS (hats, skins, back items, colours). Nothing in the
+// shop changes how a minigame plays. There is no real money anywhere. Packs (packs.js) are a
+// random-card feature paid ONLY with in-game coins, with the odds shown on screen.
 //
 // The wallet is saved in this browser's localStorage. The server decides how
 // many coins a round is worth (server/rewards.js), but it does not keep the
@@ -11,7 +12,7 @@
 // THEMSELVES hats. That is an acceptable trade for a no-accounts game.
 // ---------------------------------------------------------------------------
 
-import { COLORS, HATS, SKINS } from './constants.js';
+import { COLORS, HATS, SKINS, BACKS } from './constants.js';
 
 export const WALLET_KEY = 'tm_wallet';
 
@@ -21,15 +22,20 @@ export const WALLET_KEY = 'tm_wallet';
 // Edit the numbers freely. A normal 3-round match with friends earns roughly 50-60 coins.
 export const UNLOCK_ONLY = -1;
 const U = UNLOCK_ONLY;
-const HAT_PRICES = [0, 0, 150, 40, 0, 40, 40, 80, 100, 80, 100, 40, 120, 0, 40, 100, U, U, U, U, U, U];
-const SKIN_PRICES = [0, 0, 40, 60, 60, 60, 80, 200, U, U, U, U];
+// price -2 (PACK_ONLY) = cannot be bought directly either; you get it by opening packs (see packs.js).
+export const PACK_ONLY = -2;
+const P = PACK_ONLY;
+const HAT_PRICES = [0, 0, 150, 40, 0, 40, 40, 80, 100, 80, 100, 40, 120, 0, 40, 100, U, U, U, U, U, U, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P];
+// (hats 22-51 are all pack-only)
+const SKIN_PRICES = [0, 0, 40, 60, 60, 60, 80, 200, U, U, U, U, 50, 90, 70, 100, 120, 110, 80, 90, U, U, U, U, P, P, P, P, P, P, P, P, P, P, P, P, P];
+const BACK_PRICES = [0, 70, 70, 90, 90, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P];
 const COLOR_PRICES = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 50];
 
-export const KINDS = ['hat', 'skin', 'color'];
+export const KINDS = ['hat', 'skin', 'back', 'color'];
 
-const NAMES = { hat: HATS, skin: SKINS, color: COLORS.map((c) => c.name) };
-const PRICES = { hat: HAT_PRICES, skin: SKIN_PRICES, color: COLOR_PRICES };
-export const KIND_LABEL = { hat: 'Hats', skin: 'Skins', color: 'Colors' };
+const NAMES = { hat: HATS, skin: SKINS, back: BACKS, color: COLORS.map((c) => c.name) };
+const PRICES = { hat: HAT_PRICES, skin: SKIN_PRICES, back: BACK_PRICES, color: COLOR_PRICES };
+export const KIND_LABEL = { hat: 'Hats', skin: 'Skins', back: 'Back', color: 'Colors' };
 
 export function countOf(kind) {
   return NAMES[kind].length;
@@ -43,6 +49,9 @@ export function priceOf(kind, index) {
 export function isUnlockOnly(kind, index) {
   return priceOf(kind, index) === UNLOCK_ONLY;
 }
+export function isPackOnly(kind, index) {
+  return priceOf(kind, index) === PACK_ONLY;
+}
 
 // Every item as a flat list (handy for tests and the shop grid).
 export function catalogue(kind) {
@@ -53,7 +62,7 @@ export function catalogue(kind) {
 export function emptyWallet() {
   const owned = {};
   for (const k of KINDS) owned[k] = [];
-  const w = { coins: 0, owned, paid: [] };
+  const w = { coins: 0, owned, paid: [], pity: 0, packs: 0 };
   return normalizeWallet(w);
 }
 
@@ -71,7 +80,10 @@ export function normalizeWallet(raw) {
     owned[k] = [...set].sort((a, b) => a - b);
   }
   const paid = Array.isArray(w.paid) ? w.paid.filter((x) => typeof x === 'string').slice(-40) : [];
-  return { coins, owned, paid };
+  // pity = packs opened since the last Epic-or-better card; packs = packs opened in total (packs.js)
+  const pity = Number.isFinite(w.pity) ? Math.max(0, Math.min(999, Math.floor(w.pity))) : 0;
+  const packs = Number.isFinite(w.packs) ? Math.max(0, Math.min(1e6, Math.floor(w.packs))) : 0;
+  return { coins, owned, paid, pity, packs };
 }
 
 export function loadWallet(storage) {
@@ -122,6 +134,7 @@ export function buy(wallet, kind, index) {
   }
   if (owns(wallet, kind, index)) return { ok: false, error: 'You already own that.' };
   if (isUnlockOnly(kind, index)) return { ok: false, error: 'Coins cannot buy this one. Unlock it with an achievement!' };
+  if (isPackOnly(kind, index)) return { ok: false, error: 'This one only comes out of packs. Open a pack to try for it!' };
   const price = priceOf(kind, index);
   if (wallet.coins < price) return { ok: false, error: `You need ${price - wallet.coins} more coins.` };
   wallet.coins -= price;

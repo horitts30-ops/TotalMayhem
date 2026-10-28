@@ -149,9 +149,9 @@ class GoldGrab extends ArenaGame {
       if (c.vx === 0 && c.vy === 0) continue;
       const nx = c.x + c.vx * dt;
       const ny = c.y + c.vy * dt;
-      if (ArenaGame.walkable(nx, c.y)) c.x = nx;
+      if (this.canStand(nx, c.y)) c.x = nx;
       else c.vx = 0;
-      if (ArenaGame.walkable(c.x, ny)) c.y = ny;
+      if (this.canStand(c.x, ny)) c.y = ny;
       else c.vy = 0;
       c.vx *= decay;
       c.vy *= decay;
@@ -267,4 +267,5 @@ GoldGrab.TUNING = TUNING;
 GoldGrab.RAGE = RAGE;
 GoldGrab.VARIANTS = VARIANTS;
 
+GoldGrab.MAP_OK = true; // uses the floor shapes in server/maps.js
 module.exports = GoldGrab;

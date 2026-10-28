@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { STAGE_W, STAGE_H, OX, OY, COLORS, THEMES, INK, ARENA_TILES } from './constants.js';
+import { drawBackBehind, drawBackFront, drawPackSkin, drawPackHat, drawFunHat } from './wardrobe.js';
 
 const FONT = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
 const TILE = 64;
@@ -64,10 +65,10 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // How far each hat sticks up above the head (used to place name tags).
 // Order matches HATS in constants.js.
-const HAT_HEIGHT = [0, 40, 22, 30, 30, 38, 34, 30, 42, 24, 24, 26, 28, 30, 24, 26, 24, 34, 28, 32, 28, 44];
+const HAT_HEIGHT = [0, 40, 22, 30, 30, 38, 34, 30, 42, 24, 24, 26, 28, 30, 24, 26, 24, 34, 28, 32, 28, 44, 26, 24, 32, 24, 36, 34, 34, 32, 36, 34, 40, 34, 40, 34, 34, 30, 40, 36, 36, 34, 36, 36, 30, 30, 42, 38, 40, 38, 56, 50];
 
 // ------------------------------------------------------------------ hats
-function drawHat(ctx, hat, t) {
+function drawHat(ctx, hat, t, mood = 'normal') {
   ctx.lineJoin = 'round';
   ctx.lineWidth = 3;
   ctx.strokeStyle = INK;
@@ -627,6 +628,8 @@ function drawHat(ctx, hat, t) {
       break;
     }
     default:
+      if (hat >= 28) drawFunHat(ctx, hat, t, mood);
+      else if (hat >= 22) drawPackHat(ctx, hat, t);
       break;
   }
 }
@@ -780,7 +783,219 @@ function drawSkin(ctx, skin, color) {
       ctx.restore();
       break;
     }
+    case 12: // polka dots
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 4; col++) {
+          const x = -21 + col * 14 + (row % 2 ? 7 : 0);
+          const y = -50 + row * 11;
+          ctx.beginPath();
+          ctx.arc(x, y, 4.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      break;
+    case 13: {
+      // camo
+      const blobs = [
+        ['#4b5d2a', -12, -44, 11, 6, 0.4], ['#7a5a32', 10, -46, 9, 5, -0.5], ['#c8b878', -4, -34, 8, 5, 0.2],
+        ['#4b5d2a', 14, -28, 9, 6, 0.8], ['#7a5a32', -15, -24, 10, 5, -0.3], ['#c8b878', 3, -18, 9, 5, 0.6],
+        ['#4b5d2a', -9, -8, 11, 5, 0.1], ['#7a5a32', 13, -9, 8, 5, -0.7],
+      ];
+      ctx.globalAlpha *= 0.8;
+      for (const [c, x, y, rx, ry, rot] of blobs) {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 14: // waves
+      ctx.lineWidth = 3.8;
+      for (const y0 of [-48, -38, -28, -18, -8]) {
+        ctx.beginPath();
+        for (let x = -26; x <= 26; x += 3) ctx.lineTo(x, y0 + Math.sin((x + 26) / 4.4) * 3.2);
+        ctx.stroke();
+      }
+      break;
+    case 15: // argyle diamonds
+      for (let gy = 0; gy < 5; gy++) {
+        for (let gx = 0; gx < 4; gx++) {
+          if ((gx + gy) % 2) continue;
+          const x = -21 + gx * 14;
+          const y = -50 + gy * 12;
+          ctx.beginPath();
+          ctx.moveTo(x, y - 8);
+          ctx.lineTo(x + 7, y);
+          ctx.lineTo(x, y + 8);
+          ctx.lineTo(x - 7, y);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha *= 0.6;
+      for (let k = -3; k <= 3; k++) {
+        ctx.beginPath();
+        ctx.moveTo(-30, -26 + k * 14 - 30);
+        ctx.lineTo(30, -26 + k * 14 + 30);
+        ctx.moveTo(-30, -26 + k * 14 + 30);
+        ctx.lineTo(30, -26 + k * 14 - 30);
+        ctx.stroke();
+      }
+      break;
+    case 16: {
+      // tiger stripes
+      ctx.fillStyle = '#3a2216';
+      ctx.globalAlpha *= 0.78;
+      for (const [y, w, h] of [[-50, 18, 5], [-41, 21, 6], [-31, 17, 6], [-21, 20, 6], [-11, 16, 5]]) {
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(side * 24, y - h);
+          ctx.quadraticCurveTo(side * (24 - w * 0.6), y - h * 0.4, side * (24 - w), y);
+          ctx.quadraticCurveTo(side * (24 - w * 0.55), y + h * 0.2, side * 24, y + h);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      break;
+    }
+    case 17: {
+      // lightning bolts
+      const bolt = (x, y, k) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(k, k);
+        ctx.beginPath();
+        ctx.moveTo(2, -14);
+        ctx.lineTo(-8, 2);
+        ctx.lineTo(-1, 2);
+        ctx.lineTo(-5, 16);
+        ctx.lineTo(8, -2);
+        ctx.lineTo(1, -2);
+        ctx.lineTo(6, -14);
+        ctx.closePath();
+        ctx.fillStyle = '#ffe14a';
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = '#a86a00';
+        ctx.stroke();
+        ctx.restore();
+      };
+      bolt(-11, -40, 1.15);
+      bolt(12, -22, 1.05);
+      bolt(-9, -9, 0.7);
+      break;
+    }
+    case 18: {
+      // cow print
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillRect(-34, -58, 68, 64);
+      ctx.fillStyle = '#25202a';
+      for (const [x, y, rx, ry, rot] of [[-12, -42, 9, 6, 0.5], [12, -36, 7, 9, -0.3], [-14, -18, 7, 8, 0.2], [8, -10, 9, 5, -0.4], [-2, -28, 4, 3, 0.9], [14, -52, 6, 4, 0.1]]) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 19: {
+      // confetti
+      const pal = ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#9b5de5'];
+      [[-14, -46, 0.5], [10, -48, -0.4], [-4, -38, 1.1], [16, -34, 0.2], [-18, -30, -0.8], [2, -26, 0.6], [-10, -18, 0.1], [14, -16, -1], [-3, -8, 0.7], [10, -4, 0.3], [-17, -9, -0.5], [4, -52, 0.9]].forEach(([x, y, r], i) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(r);
+        ctx.fillStyle = pal[i % pal.length];
+        ctx.fillRect(-4, -1.8, 8, 3.6);
+        ctx.restore();
+      });
+      break;
+    }
+    case 20: {
+      // lava (achievement)
+      ctx.fillStyle = 'rgba(38,12,10,0.88)';
+      ctx.fillRect(-34, -58, 68, 64);
+      const cracks = [[[-20, -52], [-12, -40], [-16, -30], [-6, -20], [-10, -8]], [[18, -54], [10, -44], [16, -34], [8, -24], [14, -10]], [[-4, -46], [2, -36], [-2, -26], [4, -16]]];
+      ctx.lineJoin = 'round';
+      for (const [w, col] of [[4.2, '#ff5a1a'], [1.6, '#ffd23f']]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        for (const pts of cracks) {
+          ctx.beginPath();
+          pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+          ctx.stroke();
+        }
+      }
+      break;
+    }
+    case 21: {
+      // circuit board (achievement)
+      ctx.fillStyle = 'rgba(8,44,46,0.88)';
+      ctx.fillRect(-34, -58, 68, 64);
+      ctx.strokeStyle = '#5cf2c2';
+      ctx.lineWidth = 1.8;
+      const traces = [[[-24, -48], [-8, -48], [-8, -36], [8, -36]], [[24, -50], [14, -50], [14, -28], [24, -28]], [[-24, -26], [-12, -26], [-12, -14], [4, -14], [4, -4]], [[10, -22], [10, -10], [24, -10]], [[-2, -56], [-2, -44]]];
+      for (const pts of traces) {
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#c8fff0';
+      for (const [x, y] of [[8, -36], [24, -28], [4, -4], [24, -10], [-24, -48], [-24, -26]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 22: {
+      // frost (achievement)
+      const g = ctx.createLinearGradient(-30, -54, 30, 2);
+      g.addColorStop(0, 'rgba(226,246,255,0.82)');
+      g.addColorStop(0.5, 'rgba(160,214,244,0.76)');
+      g.addColorStop(1, 'rgba(226,246,255,0.84)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-34, -58, 68, 64);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      for (const [cx, cy, R] of [[-8, -38, 11], [12, -16, 9]]) {
+        for (let a = 0; a < 3; a++) {
+          const ang = (a * Math.PI) / 3 + 0.2;
+          ctx.beginPath();
+          ctx.moveTo(cx - Math.cos(ang) * R, cy - Math.sin(ang) * R);
+          ctx.lineTo(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R);
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = '#ffffff';
+      for (const [x, y, r] of [[14, -46, 1.6], [-18, -20, 1.4], [0, -8, 1.8], [18, -34, 1.2]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 23: {
+      // disco ball (achievement)
+      const pal = ['#d7dde8', '#8ea2c8', '#f4f6fb', '#b46bd6', '#58c6f0'];
+      ctx.fillStyle = '#7d8aa8';
+      ctx.fillRect(-34, -58, 68, 64);
+      for (let gy = 0; gy < 8; gy++) {
+        for (let gx = 0; gx < 6; gx++) {
+          ctx.fillStyle = pal[(gx * 7 + gy * 13 + gx * gy) % pal.length];
+          ctx.fillRect(-24 + gx * 8, -56 + gy * 8, 7, 7);
+        }
+      }
+      ctx.fillStyle = '#ffffff';
+      starPath(ctx, -8, -40, 6, 2);
+      ctx.fill();
+      starPath(ctx, 13, -18, 5, 1.8);
+      ctx.fill();
+      break;
+    }
     default:
+      if (skin >= 24) drawPackSkin(ctx, skin, color);
       break;
   }
 }
@@ -790,7 +1005,7 @@ function drawSkin(ctx, skin, color) {
 // stretching keeps them standing on the ground.
 export function drawBlob(ctx, o) {
   const {
-    x, y, color, hat = 0, skin = 0, fx = 0, fy = 1, sx = 1, sy = 1, walk = 0, alpha = 1, rot = 0, mood = 'normal', t = 0,
+    x, y, color, hat = 0, skin = 0, back = 0, fx = 0, fy = 1, sx = 1, sy = 1, walk = 0, alpha = 1, rot = 0, mood = 'normal', t = 0,
   } = o;
   ctx.save();
   ctx.translate(x, y);
@@ -801,6 +1016,9 @@ export function drawBlob(ctx, o) {
 
   const edge = mix(color, '#000000', 0.28);
   const belly = mix(color, '#ffffff', 0.5);
+
+  // cape / cloak / hoodie parts that sit BEHIND the body
+  if (back) drawBackBehind(ctx, back, { walk, fx, t });
 
   // feet
   const lift = Math.sin(walk) * 5;
@@ -848,6 +1066,9 @@ export function drawBlob(ctx, o) {
   ctx.beginPath();
   ctx.ellipse(-10, -43, 4.5, 7.5, -0.5, 0, Math.PI * 2);
   ctx.fill();
+
+  // clasps, hoodie pocket and strings (over the body)
+  if (back) drawBackFront(ctx, back, { walk, fx, t });
 
   // eyes
   const px = clamp(fx, -1, 1) * 3;
@@ -908,10 +1129,18 @@ export function drawBlob(ctx, o) {
   // hat
   ctx.save();
   ctx.translate(0, -48);
-  drawHat(ctx, hat, t);
+  drawHat(ctx, hat, t, mood);
   ctx.restore();
 
   ctx.restore();
+}
+
+// A small number that is different for every player id, so animated hats do not all move together.
+function idPhase(id) {
+  let h = 0;
+  const str = String(id);
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 997;
+  return (h % 100) * 0.173;
 }
 
 function drawGhost(ctx, o) {
@@ -1139,7 +1368,9 @@ export class Renderer {
     const arena = frame.latest && frame.latest.gid && frame.latest.gid !== 'crumbleFloor';
     if (arena) {
       // Open-arena minigame: a flat floor, plus whatever this game puts on it.
-      const flat = { ...frame, tiles: ARENA_TILES };
+      // the server sends the floor shape (arena.floor, 9 rows of '#' and '.'); no shape = the classic oval
+      const shape = frame.arena && Array.isArray(frame.arena.floor) ? frame.arena.floor.join('').replace(/#/g, '0').replace(/\./g, '_') : ARENA_TILES;
+      const flat = { ...frame, tiles: shape };
       this.trackTiles(flat);
       this.drawTiles(ctx, flat, theme);
       this.drawArenaGame(ctx, frame, dt);
@@ -2723,7 +2954,7 @@ export class Renderer {
     }
 
     drawBlob(ctx, {
-      x: X, y: Y, color, hat: meta.hat, skin: meta.skin || 0, fx: p.fx, fy: p.fy, sx, sy, walk: s.walk, alpha, rot, mood, t: this.clock,
+      x: X, y: Y, color, hat: meta.hat, skin: meta.skin || 0, back: meta.back || 0, fx: p.fx, fy: p.fy, sx, sy, walk: s.walk, alpha, rot, mood, t: this.clock + idPhase(p.id),
     });
 
     if (p.bm) this.drawBomb(ctx, X + 24, Y - 34, frame.latest.bomb);
@@ -2914,7 +3145,7 @@ export function drawPreview(canvas, look, t = 0, mood = 'normal') {
   ctx.scale(k, k);
   const bob = Math.abs(Math.sin(t * 3)) * 3;
   drawBlob(ctx, {
-    x: 0, y: -bob, color: COLORS[look.color % COLORS.length].hex, hat: look.hat, skin: look.skin || 0, fx: 0, fy: 1,
+    x: 0, y: -bob, color: COLORS[look.color % COLORS.length].hex, hat: look.hat, skin: look.skin || 0, back: look.back || 0, fx: 0, fy: 1,
     sx: 1 + Math.sin(t * 6) * 0.02, sy: 1 - Math.sin(t * 6) * 0.02, walk: 0, mood, t,
   });
   ctx.restore();

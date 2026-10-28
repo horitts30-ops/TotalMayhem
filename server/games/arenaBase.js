@@ -30,6 +30,7 @@ const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
 const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
 const { rageVariant } = require('../rage');
+const { getMap } = require('../maps');
 
 // ----- Arena (same size and shape as Crumble Floor, so the client can reuse it)
 const TILE = 64;
@@ -106,6 +107,9 @@ class ArenaGame {
    */
   constructor(participants, variant, options = {}, setup = { maxTime: 60 }) {
     this.rage = options.rage === true; // Rage Bait mode (see server/rage.js)
+    this.map = getMap(options.mapId); // the floor shape (see server/maps.js); unknown id = classic
+    this.canStand = this.map.walkable;
+    this.center = this.map.center;
     this.v = this.rage ? rageVariant(variant) : variant;
     this.timeScale = options.timeScale > 0 ? options.timeScale : 1;
     this.rng = typeof options.rng === 'function' ? options.rng : Math.random;
@@ -121,10 +125,11 @@ class ArenaGame {
     this.participantCount = n;
     participants.forEach((info, i) => {
       const angle = n === 1 ? Math.PI : (i / n) * Math.PI * 2 - Math.PI / 2;
-      const x = WORLD_W / 2 + Math.cos(angle) * (n === 1 ? 0 : TILE * 3.6);
-      const y = WORLD_H / 2 + Math.sin(angle) * (n === 1 ? 0 : TILE * 2.4);
-      const dx = WORLD_W / 2 - x;
-      const dy = WORLD_H / 2 - y;
+      const sp = this.map.spawns && this.map.spawns[i % this.map.spawns.length];
+      const x = sp ? sp.x : WORLD_W / 2 + Math.cos(angle) * (n === 1 ? 0 : TILE * 3.6);
+      const y = sp ? sp.y : WORLD_H / 2 + Math.sin(angle) * (n === 1 ? 0 : TILE * 2.4);
+      const dx = this.center.x - x;
+      const dy = this.center.y - y;
       const d = Math.hypot(dx, dy) || 1;
       this.players.set(info.id, {
         id: info.id,
@@ -195,9 +200,11 @@ class ArenaGame {
   }
   // Stamina prices (0 = this action is free for this player right now).
   _jumpCost(p) {
+    if (this.rage) return 0; // Rage Bait: no stamina at all
     return STAMINA.jumpCost;
   }
   _shoveCost(p) {
+    if (this.rage) return 0;
     return STAMINA.shoveCost;
   }
   _solid(p) {
@@ -218,9 +225,9 @@ class ArenaGame {
     for (let i = 0; i < 60; i++) {
       const x = margin + this.rng() * (WORLD_W - margin * 2);
       const y = margin + this.rng() * (WORLD_H - margin * 2);
-      if (walkable(x, y)) return { x, y };
+      if (this.canStand(x, y)) return { x, y };
     }
-    return { x: WORLD_W / 2, y: WORLD_H / 2 };
+    return { x: this.center.x, y: this.center.y };
   }
 
   _livePlayers() {
@@ -352,12 +359,12 @@ class ArenaGame {
     // move, one axis at a time so you slide along the edge of the arena
     const dx = (p.vx + p.kx) * dt;
     const dy = (p.vy + p.ky) * dt;
-    if (walkable(p.x + dx, p.y)) p.x += dx;
+    if (this.canStand(p.x + dx, p.y)) p.x += dx;
     else {
       p.vx = 0;
       p.kx = 0;
     }
-    if (walkable(p.x, p.y + dy)) p.y += dy;
+    if (this.canStand(p.x, p.y + dy)) p.y += dy;
     else {
       p.vy = 0;
       p.ky = 0;
@@ -442,11 +449,11 @@ class ArenaGame {
         const push = (minD - d) / 2;
         const ux = dx / d;
         const uy = dy / d;
-        if (walkable(a.x - ux * push, a.y - uy * push)) {
+        if (this.canStand(a.x - ux * push, a.y - uy * push)) {
           a.x -= ux * push;
           a.y -= uy * push;
         }
-        if (walkable(b.x + ux * push, b.y + uy * push)) {
+        if (this.canStand(b.x + ux * push, b.y + uy * push)) {
           b.x += ux * push;
           b.y += uy * push;
         }

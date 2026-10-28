@@ -30,7 +30,17 @@ export const COLORS = [
 // range (SKIN_COUNT in server/config.js).
 export const SKINS = ['Plain', 'Spots', 'Stripes', 'Hearts', 'Stars', 'Zigzag', 'Checkers', 'Rainbow',
   // Unlock-only (achievements):
-  'Bubbles', 'Flames', 'Galaxy', 'Gold'];
+  'Bubbles', 'Flames', 'Galaxy', 'Gold',
+  // More skins you can buy:
+  'Polka', 'Camo', 'Waves', 'Argyle', 'Tiger', 'Lightning', 'Cow', 'Confetti',
+  // More unlock-only (achievements):
+  'Lava', 'Circuit', 'Frost', 'Disco',
+  // Pack-only skins (v0.12) - you get these from packs. Order = rarity groups (see rarity.js).
+  'Denim', 'Pinstripe', 'Plaid', // common
+  'Leopard', 'Snowflakes', 'Sunset', // uncommon
+  'Ocean', 'Pixel', 'Toxic', // rare
+  'Neon', 'Stained glass', // epic
+  'Aurora', 'Diamond']; // legendary
 
 export const HATS = [
   'No hat',
@@ -56,6 +66,29 @@ export const HATS = [
   'Space helmet',
   'Detective cap',
   'Jester hat',
+  // Pack-only hats (v0.12):
+  'Fez', // common
+  'Sombrero', // uncommon
+  'Knight helm', // rare
+  'Ninja band', 'Dragon horns', // epic
+  'Royal crown', // legendary
+  // Pack-only funny hats (v0.12). Collections: Disaster, Magical Nonsense, Snack Attack, Show-Off, Weird Science.
+  'Warning sign', 'Cardboard box', 'Budget wizard', 'Noodle nest', 'Pizza slice', 'Robot colander', // common
+  'Emergency chicken', 'Unpaid unicorn', 'Burger crown', 'Tiny crown', 'Alien antenna', // uncommon
+  'Spinning siren', 'Cursed bucket', 'Angry popcorn', 'Trophy head', 'Champion bucket', 'Satellite dish', // rare
+  'Tiny dragon', 'The Prophecy', 'Forbidden cheese', 'Millionaire hair', 'Experiment 404', // epic
+  'Main character', 'UFO abduction', // legendary
+];
+
+// Back items (v0.12): capes, cloaks and hoodies. Order matches BACK_DEFS in wardrobe.js.
+export const BACKS = [
+  'No back item',
+  'Red cape', 'Blue cape', 'Gray hoodie', 'Green cloak', // buyable in the shop
+  'Yellow cape', 'Pink hoodie', 'Orange hoodie', 'Brown cloak', // pack: common
+  'Striped cape', 'Frog hoodie', 'Cat hoodie', 'Black cloak', // uncommon
+  'Hero cape', 'Wizard cloak', 'Royal cape', 'Vampire cloak', // rare
+  'Flame cape', 'Ice cloak', 'Rainbow cape', // epic
+  'Golden cape', 'Galaxy cloak', // legendary
 ];
 
 // One colour theme per minigame variant (each round looks different).
