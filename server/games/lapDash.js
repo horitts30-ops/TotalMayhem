@@ -26,7 +26,7 @@ const TUNING = {
   hurdleHalfThick: 11,
   hurdleHeight: 22, // be this high to hop it
   tripStun: 0.65,
-  hurdleGrace: 0.9,
+  hurdleGrace: 0.5, // seconds of safety AFTER the stun ends, to get clear of the bar
   boostGap1: 4, // this many gates behind the leader: a little faster...
   boostGap2: 8, // ...and this many: faster still
   boost1: 1.08,
@@ -185,7 +185,9 @@ class LapDash extends ArenaGame {
           const across = -dx * h.ty + dy * h.tx; // across the track
           if (Math.abs(along) <= this.cfg.hurdleHalfThick + 14 && Math.abs(across) <= this.cfg.hurdleHalfLen) {
             p.trips++;
-            p.tripGrace = this.cfg.hurdleGrace;
+            // The grace period starts when the stun ENDS, so you always get a moment to walk out of the bar
+            // (before, Rage Bait's stun was longer than its grace and you re-tripped on the same bar forever).
+            p.tripGrace = this.cfg.tripStun + this.cfg.hurdleGrace;
             p.stun = Math.max(p.stun, this.cfg.tripStun);
             p.vx *= 0.15;
             p.vy *= 0.15;

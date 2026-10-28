@@ -522,7 +522,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **340 automated tests** (about a minute and a half):
+runs **341 automated tests** (about a minute and a half):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -575,7 +575,7 @@ runs **340 automated tests** (about a minute and a half):
 * `tests/predict.test.js` (7 tests) - the movement prediction: replays a whole round against the real server rules
   with 20-100 ms delays and checks the guess is far closer than the old method, walls, smoothing, and that every
   game's snapshot carries the steering info.
-* `tests/rage.test.js` (7 tests) - Rage Bait: no stamina, shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
+* `tests/rage.test.js` (8 tests) - Rage Bait: no stamina, no getting stuck in Lap Dash hurdles, shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
   variant finishing in rage mode with 1-8 players, and Lap Dash's extra hurdles matching what the browser draws.
 * `tests/packs.test.js` (17 tests) - back items and catalogue sizes, your five hat collections, pack-only items (cannot be bought, all appear in a pack), outfits,
   odds and prices, the "duplicates never make a profit" check, guarantees over thousands of random packs, pity, duplicate refunds, wallet saving and hostile saved data,
@@ -797,7 +797,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 340 automated tests pass.
+* All 341 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -868,6 +868,12 @@ ever want coins to follow players between devices, that is the step to take.
   the stamina bar is hidden. No page errors appeared.
 * Packs: the guarantee, pity, duplicate refunds (always far below the price) and outfit rules are covered by tests, including thousands of random packs.
 * Rage Bait: a test checks that jumping and shoving work with an empty bar and spend nothing.
+
+**v0.12.1 fixes:** (1) In Lap Dash with Rage Bait you could get **stuck in a hurdle bar for good** - the trip stun (1.1 s) was longer than the safety time after it (0.6 s),
+so you re-tripped on the same bar over and over (my test showed 13 trips and 7.7 s stuck). The safety time now starts when the stun ends, and a test checks you trip once and walk on.
+(2) The little menu characters are no longer redrawn while their screen is hidden, and only at 30 pictures a second (less work every frame). (3) The Rage Bait red glow is now a cheap gradient
+instead of a big blurred shadow (cheaper on large Retina screens). I could not reproduce slowness in my own tests (steady 60 FPS, small network traffic, tiny server cost), so I do **not**
+know that these fully fix the lag you feel; the stuck-in-the-bar bug was real and is fixed.
 
 **Not verified in v0.12.0 (please check yourself):**
 * **Pack prices, odds and refund amounts are first guesses.** I have not watched real people earn coins and open packs, so I do not know if 1500 coins for a Legend pack is too slow or too fast

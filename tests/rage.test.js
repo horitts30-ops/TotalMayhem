@@ -184,3 +184,34 @@ test('rage: still fair - the same numbers for every player in the room', () => {
   for (const p of g.players.values()) assert.deepEqual(g._moveInfo(p), first);
   assert.ok(ArenaGame.walkable(g.players.get('p1').x, g.players.get('p1').y));
 });
+
+test('rage: running into a Lap Dash hurdle trips you once and you can walk on (you never get stuck in the bar)', () => {
+  const LapDash = require('../server/games/lapDash');
+  for (const rage of [false, true]) {
+    for (const variant of ['classic', 'gauntlet']) {
+      const id = LapDash.VARIANTS[variant] ? variant : 'classic';
+      const g = new LapDash([{ id: 'a', name: 'A' }], id, { rage });
+      g.time = 0.5;
+      const p = g.players.get('a');
+      const h = g.track.hurdles[0];
+      p.x = h.x - h.tx * 80;
+      p.y = h.y - h.ty * 80;
+      p.z = 0;
+      p.vx = p.vy = p.kx = p.ky = p.vz = 0;
+      p.fx = h.tx;
+      p.fy = h.ty;
+      let inside = 0;
+      let longest = 0;
+      for (let i = 0; i < 30 * 8; i++) {
+        g.setInput('a', { mx: h.tx, my: h.ty, jump: false, shove: false });
+        g.tick(DT);
+        const along = (p.x - h.x) * h.tx + (p.y - h.y) * h.ty;
+        const across = -(p.x - h.x) * h.ty + (p.y - h.y) * h.tx;
+        if (Math.abs(along) <= 25 && Math.abs(across) <= 78) longest = Math.max(longest, ++inside);
+        else inside = 0;
+      }
+      assert.equal(p.trips, 1, `${id} rage=${rage}: one trip, not a loop (${p.trips})`);
+      assert.ok(longest / 30 < 2.2, `${id} rage=${rage}: left the bar within about 2 seconds (${(longest / 30).toFixed(2)}s)`);
+    }
+  }
+});

@@ -160,9 +160,17 @@ function addAvatar(canvas, getLook, mood = 'normal') {
   S.avatars.push({ canvas, getLook, mood, off: Math.random() * 3 });
 }
 
+let avatarFrame = 0;
 function animateAvatars(tSec) {
+  // The little menu characters only need ~30 pictures a second, and nothing needs drawing for a screen
+  // that is hidden (the lobby's cards stay in the page while you play, which wasted time every frame).
+  avatarFrame++;
+  if (avatarFrame % 2 === 0) return;
   S.avatars = S.avatars.filter((a) => a.canvas.isConnected);
-  for (const a of S.avatars) drawPreview(a.canvas, a.getLook(), tSec + a.off, a.mood);
+  for (const a of S.avatars) {
+    if (a.canvas.getClientRects().length === 0) continue; // hidden
+    drawPreview(a.canvas, a.getLook(), tSec + a.off, a.mood);
+  }
 }
 
 // Things that depend on the room's settings: the Rage Bait look and the emoji button.

@@ -553,7 +553,9 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
 /* The red glow covers the whole window (not just the 1024x720 picture), whatever the screen shape. */
 body.rage-bait #stage-wrap::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
-  box-shadow: inset 0 0 14vmin 3vmin rgba(214, 20, 20, 0.62);
+  /* a plain gradient on its own layer is far cheaper than a big blurred shadow (matters on big Retina screens) */
+  background: radial-gradient(ellipse at center, rgba(214, 20, 20, 0) 52%, rgba(214, 20, 20, 0.5) 82%, rgba(214, 20, 20, 0.68) 100%);
+  will-change: transform;
 }
 .public-row .pr-rage { font-size: 0.85rem; margin-left: 4px; }
 
