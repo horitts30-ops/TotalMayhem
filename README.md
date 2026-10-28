@@ -15,6 +15,10 @@ skins that coins cannot buy (all explained in section 3).
 
 ## 1. Run it (5 minutes)
 
+VISIT: totalmayhem.onrender.com
+
+OR
+
 You need **Node.js 18 or newer** (you said you have it; check with `node --version`).
 
 1. Unzip the project and open a terminal **inside the `total-mayhem` folder**.
