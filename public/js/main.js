@@ -14,6 +14,7 @@ import { socket, request, saveSession, loadSession, clearSession } from './net.j
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { Predictor, walkableFor } from './predict.js';
+import { decodeSnap } from './snapcodec.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 import { music, sceneFor } from './music.js';
 import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, BACKS, THEMES, EMOTES } from './constants.js';
@@ -1653,7 +1654,8 @@ socket.on('room:kicked', (info) => {
   leaveToTitle((info && info.reason) || 'You were removed from the room.');
 });
 
-socket.on('game:snap', (snap) => {
+socket.on('game:snap', (raw) => {
+  const snap = decodeSnap(raw);
   if (!S.room || S.room.phase !== 'playing') return;
   snap.map = new Map(snap.ps.map((p) => [p.id, p]));
   const arrived = performance.now();

@@ -292,9 +292,9 @@ points, or a **bomb** that costs the digger 2 points and blasts everybody close 
 nobody can peek. Two diggers on the same X: the first to finish gets it. A shove fills the hole back in. Versions: *Dig Dash* and *Bomb Squad*
 (many more bombs, faster digging).
 
-**Mole Stomp (Whack-a-mole) - 60 seconds.** Moles pop out of nine burrows. A mound **rumbles** first, then the mole rises: **jump on it** to
-score (+1). **Red** moles bite (lose 2 points, dizzy), and a **gold** mole is worth +3 and appears near whoever is losing. Walking over a mole does
-nothing, you have to land on it. Versions: *Mole Stomp* and *Mole Frenzy* (more moles, faster).
+**Mole Stomp (Whack-a-mole) - 60 seconds.** Moles pop out of nine burrows. A mound **rumbles** first, then the mole rises: **jump on it or just shove it** to
+score (+1) (a shove whacks the mole in front of you, up to a shove's reach; rivals in reach still get shoved). **Red** moles bite (lose 2 points, dizzy), and a **gold** mole is worth +3 and appears near whoever is losing. Walking over a mole does
+nothing, you have to land on it or shove it. Versions: *Mole Stomp* and *Mole Frenzy* (more moles, faster).
 
 ### Music
 
@@ -522,7 +522,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **341 automated tests** (about a minute and a half):
+runs **347 automated tests** (about a minute and a half):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -577,6 +577,7 @@ runs **341 automated tests** (about a minute and a half):
   game's snapshot carries the steering info.
 * `tests/rage.test.js` (8 tests) - Rage Bait: no stamina, no getting stuck in Lap Dash hurdles, shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
   variant finishing in rage mode with 1-8 players, and Lap Dash's extra hurdles matching what the browser draws.
+* `tests/optimize.test.js` (5 tests) - the smaller snapshot format: exact round trip for every minigame, clearly smaller, odd data survives, the server and browser decoders agree, and a real round over a socket.
 * `tests/packs.test.js` (17 tests) - back items and catalogue sizes, your five hat collections, pack-only items (cannot be bought, all appear in a pack), outfits,
   odds and prices, the "duplicates never make a profit" check, guarantees over thousands of random packs, pity, duplicate refunds, wallet saving and hostile saved data,
   drawing every new cosmetic without errors, and the server keeping/clamping the back item.
@@ -644,6 +645,7 @@ total-mayhem/
       meteorMayhem.js     ALL the rules of Meteor Mayhem
       crownChaos.js       ALL the rules of Crown Chaos
       paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
+    snapcodec.js          makes game snapshots ~40% smaller on the wire (public/js/snapcodec.js undoes it)
     stamina.js            the shared jump/shove stamina numbers and helpers
     maps.js               the 11 floor shapes, spawn points and centres (add a map here)
     rage.js               Rage Bait mode physics (each game also has a RAGE table)
@@ -682,6 +684,7 @@ total-mayhem/
     achievements.test.js  trophy case tests
     maps.test.js          the 11 maps + their use in the minigames
     v011.test.js          new skins, new achievements, browser scripts parse
+    optimize.test.js      smaller snapshots (lag/size optimizations)
     packs.test.js         back items, packs, odds, outfits, wallet, server back item
     music.test.js         music tests
     network.test.js       multiplayer tests
@@ -797,7 +800,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 341 automated tests pass.
+* All 347 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -868,6 +871,17 @@ ever want coins to follow players between devices, that is the step to take.
   the stamina bar is hidden. No page errors appeared.
 * Packs: the guarantee, pity, duplicate refunds (always far below the price) and outfit rules are covered by tests, including thousands of random packs.
 * Rage Bait: a test checks that jumping and shoving work with an empty bar and spend nothing.
+
+**v0.12.3 - lag optimizations (what changed and what I measured):**
+* **Smaller updates:** every 1/30 s the server sends each player a picture of the game. Players' field names are now sent once instead of once per player: about **40% smaller**
+  (8 players: ~1.8 KB -> ~1.0 KB per update, so each player downloads roughly 30 KB/s instead of 50 KB/s).
+* **No pile-up:** updates are now "volatile": if one player's connection is clogged, the server DROPS the old picture instead of queueing it (the next arrives 33 ms later anyway).
+  Queued old pictures are a classic reason lag keeps getting worse.
+* **Less drawing:** the background (gradient, dashed rings, clouds) is painted about 20 times a second and copied the other frames, Lap Dash's track is painted once per round instead of every frame,
+  the game canvas is marked opaque, and the menu characters are drawn only when visible (v0.12.1). The game also lowers its own picture quality automatically if your computer struggles (existing feature).
+* **Not measured:** I measured the size and the logic (tests) and watched Lap Dash and Crumble Floor render correctly, but I cannot measure the felt lag on your Mac or your internet. If it is still bad, press **F3** and send me the FPS and ping.
+
+**v0.12.2:** in Mole Stomp you can now **shove moles** to whack them (same points; gold +3, red still bites), not only jump on them.
 
 **v0.12.1 fixes:** (1) In Lap Dash with Rage Bait you could get **stuck in a hurdle bar for good** - the trip stun (1.1 s) was longer than the safety time after it (0.6 s),
 so you re-tripped on the same bar over and over (my test showed 13 trips and 7.7 s stuck). The safety time now starts when the stun ends, and a test checks you trip once and walk on.

@@ -1214,12 +1214,18 @@ function drawNameTag(ctx, text, x, y, color, isMe) {
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    // alpha:false = the picture is always fully painted, so the browser can skip blending it with the page behind
+    this.ctx = canvas.getContext('2d', { alpha: false });
     this.px = 1;
     this.quality = 1; // 0.5 - 1; main.js lowers it automatically if the game runs slowly
     this.cssScale = 1;
     this.tileLayer = null; // offscreen picture of the floor that is not cracking
     this.tileSig = '';
+    this.bgLayer = null; // the background (gradient, rings, clouds, twinkles) repainted ~20 times a second, not 60+
+    this.bgKey = '';
+    this.bgAt = -1;
+    this.trackLayer = null; // Lap Dash's track (never changes during a round)
+    this.trackKey = '';
     this.clock = 0;
     this.shakeAmt = 0;
     this.particles = [];
@@ -1249,6 +1255,8 @@ export class Renderer {
     this.canvas.width = Math.round(STAGE_W * this.px);
     this.canvas.height = Math.round(STAGE_H * this.px);
     this.tileSig = ''; // the cached floor must be repainted at the new size
+    this.bgKey = ''; // ...and so must the cached background and track
+    this.trackKey = '';
   }
 
   setQuality(q) {
@@ -1400,7 +1408,27 @@ export class Renderer {
     }
   }
 
+  // The background moves very slowly, so it is painted into an offscreen picture about 20 times a
+  // second and just copied on every other frame. That saves a lot of painting (the big dashed rings).
   drawBackground(ctx, theme) {
+    const key = `${theme.bg[0]}|${theme.bg[1]}|${theme.ring}|${theme.cloud}|${this.px}`;
+    if (!this.bgLayer) this.bgLayer = document.createElement('canvas');
+    const stale = key !== this.bgKey || this.clock < this.bgAt || this.clock - this.bgAt >= 1 / 20;
+    if (stale) {
+      if (key !== this.bgKey || this.bgLayer.width !== this.canvas.width) {
+        this.bgLayer.width = this.canvas.width;
+        this.bgLayer.height = this.canvas.height;
+      }
+      const lc = this.bgLayer.getContext('2d');
+      lc.setTransform(this.px, 0, 0, this.px, 0, 0);
+      this.paintBackground(lc, theme);
+      this.bgKey = key;
+      this.bgAt = this.clock;
+    }
+    ctx.drawImage(this.bgLayer, 0, 0, STAGE_W, STAGE_H);
+  }
+
+  paintBackground(ctx, theme) {
     const g = ctx.createLinearGradient(0, 0, 0, STAGE_H);
     g.addColorStop(0, theme.bg[0]);
     g.addColorStop(1, theme.bg[1]);
@@ -1839,6 +1867,27 @@ export class Renderer {
   drawTrack(ctx, frame, tr) {
     const cx = OX + tr.cx;
     const cy = OY + tr.cy;
+    // The track surface, its dashed centre line and the start strip never change during a round, so they are
+    // painted once into an offscreen picture and copied each frame.
+    const key = `${tr.cx},${tr.cy},${tr.a},${tr.b},${tr.start},${this.px}`;
+    if (key !== this.trackKey || !this.trackLayer) {
+      if (!this.trackLayer) this.trackLayer = document.createElement('canvas');
+      this.trackLayer.width = this.canvas.width;
+      this.trackLayer.height = this.canvas.height;
+      const lc = this.trackLayer.getContext('2d');
+      lc.setTransform(this.px, 0, 0, this.px, 0, 0);
+      this.paintTrackBase(lc, tr);
+      this.trackKey = key;
+    }
+    ctx.drawImage(this.trackLayer, 0, 0, STAGE_W, STAGE_H);
+    ctx.save();
+    this.drawTrackLive(ctx, frame, tr, cx, cy);
+    ctx.restore();
+  }
+
+  paintTrackBase(ctx, tr) {
+    const cx = OX + tr.cx;
+    const cy = OY + tr.cy;
     ctx.save();
     // the track surface: a wide soft band around the oval
     ctx.strokeStyle = 'rgba(40,20,70,0.22)';
@@ -1862,7 +1911,10 @@ export class Renderer {
       ctx.fillStyle = k % 2 ? '#ffffff' : '#2a1a3c';
       ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
     }
+    ctx.restore();
+  }
 
+  drawTrackLive(ctx, frame, tr, cx, cy) {
     // the player's next gate glows
     const me = frame.players.find((p) => p.id === frame.myId);
     const next = me ? (me.gt || 0) % tr.gates.length : 0;

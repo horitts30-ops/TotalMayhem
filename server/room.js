@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 const { randomId, makeRoomCode, cleanName, randomSillyName, safeInt } = require('./util');
+const { encodeSnap } = require('./snapcodec');
 const games = require('./games');
 const { roundReward, finalReward } = require('./rewards');
 const powerups = require('./powerups');
@@ -518,11 +519,13 @@ class Room {
       const people = this.connectedPlayers();
       const views = this.game.snapshotsByViewer(people.map((p) => p.id));
       for (const p of people) {
-        if (p.socketId) this.io.to(p.socketId).emit('game:snap', views.get(p.id) || views.get('*'));
+        // volatile = if this player's connection is clogged, DROP the picture instead of queueing it
+        // (the next one comes in 33 ms anyway). Queued old pictures are what makes lag grow and grow.
+        if (p.socketId) this.io.to(p.socketId).volatile.emit('game:snap', encodeSnap(views.get(p.id) || views.get('*')));
       }
       return;
     }
-    this.io.to(this.code).emit('game:snap', this.game.snapshot());
+    this.io.to(this.code).volatile.emit('game:snap', encodeSnap(this.game.snapshot()));
   }
 
   shouldClose(now) {

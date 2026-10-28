@@ -4,10 +4,10 @@
 // MOLE STOMP  -  minigame #13 (category: Whack-a-mole)
 //
 // Nine burrows are dotted around the arena. A mound RUMBLES, then a mole pops
-// up for a moment. JUMP and land on it to stomp it for a point! Watch out for
+// up for a moment. JUMP and land on it - or just SHOVE it - to whack it for a point! Watch out for
 // the RED moles (they bite: you lose points) and the rare GOLD mole (worth 3).
 //
-// Jumping costs stamina, so you cannot hop everywhere. Whoever is in last place
+// Jumping costs stamina, so you cannot hop everywhere (a shove is the quick way). Whoever is in last place
 // sees the golden mole pop up closest to them. Nobody is knocked out.
 // ===========================================================================
 
@@ -58,16 +58,16 @@ const VARIANTS = {
 };
 
 const INSTRUCTIONS = [
-  'A mound rumbles, then a mole pops up. JUMP and land on it to stomp it!',
-  'RED moles bite: stomp one and you lose points. Gold moles are worth 3.',
-  'Jumping uses stamina, so choose your jumps carefully.',
-  'SHOVE rivals to stop them stomping. Most points wins!',
+  'A mound rumbles, then a mole pops up. JUMP on it, or just SHOVE it, to whack it!',
+  'RED moles bite: whack one and you lose points. Gold moles are worth 3.',
+  'Jumping uses stamina, so choose your jumps carefully. Shoving a mole works too.',
+  'SHOVE rivals to stop them whacking. Most points wins!',
 ];
 
 const CONTROLS = [
   { label: 'Move', keys: 'WASD / Arrow keys' },
   { label: 'Jump (stomp!)', keys: 'Space' },
-  { label: 'Shove', keys: 'E or Shift' },
+  { label: 'Shove (whack moles!)', keys: 'E or Shift' },
   { label: 'Mute', keys: 'M' },
 ];
 
@@ -188,6 +188,49 @@ class MoleStomp extends ArenaGame {
     });
   }
 
+  // A player whacks a mole (by landing on it or by shoving it): points, or a bite for a red one.
+  _whack(m, p) {
+    const [bx, by] = BURROWS[m.b];
+    if (m.kind === 'red') {
+      p.bites++;
+      p.points = Math.max(0, p.points - this.cfg.redPenalty);
+      p.stun = Math.max(p.stun, this.cfg.redStun);
+      this.events.push({ k: 'bite', id: p.id, x: bx, y: by });
+    } else {
+      const v = m.kind === 'gold' ? this.cfg.goldValue : 1;
+      p.points += v;
+      p.stomps++;
+      if (m.kind === 'gold') p.golds++;
+      this.events.push({ k: 'stomp', id: p.id, x: bx, y: by, v, gold: m.kind === 'gold' ? 1 : 0 });
+    }
+  }
+
+  // Shoving whacks the moles in front of you. (Players in reach are still shoved as usual.)
+  _doShove(p) {
+    super._doShove(p);
+    const T = ArenaGame.TUNING;
+    const reach = T.shoveRange * p.mods.range;
+    let best = null;
+    let bestD = Infinity;
+    for (const m of this.moles) {
+      if (this.time - m.born < this.cfg.rumble) continue; // still rumbling: nothing to hit yet
+      const [bx, by] = BURROWS[m.b];
+      const dx = bx - p.x;
+      const dy = by - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d > reach) continue;
+      if (d > 1 && (dx * p.fx + dy * p.fy) / d < T.shoveConeDot) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    if (best) {
+      this.moles = this.moles.filter((m) => m !== best);
+      this._whack(best, p);
+    }
+  }
+
   _stomps() {
     const gone = new Set();
     for (const m of this.moles) {
@@ -207,18 +250,7 @@ class MoleStomp extends ArenaGame {
       }
       if (!best) continue;
       gone.add(m.id);
-      if (m.kind === 'red') {
-        best.bites++;
-        best.points = Math.max(0, best.points - this.cfg.redPenalty);
-        best.stun = Math.max(best.stun, this.cfg.redStun);
-        this.events.push({ k: 'bite', id: best.id, x: bx, y: by });
-      } else {
-        const v = m.kind === 'gold' ? this.cfg.goldValue : 1;
-        best.points += v;
-        best.stomps++;
-        if (m.kind === 'gold') best.golds++;
-        this.events.push({ k: 'stomp', id: best.id, x: bx, y: by, v, gold: m.kind === 'gold' ? 1 : 0 });
-      }
+      this._whack(m, best);
     }
     if (gone.size) this.moles = this.moles.filter((m) => !gone.has(m.id));
   }
@@ -247,7 +279,7 @@ class MoleStomp extends ArenaGame {
 
   _hud() {
     if (this.time < 0) return '';
-    return this.moles.some((m) => m.kind === 'gold') ? 'GOLD MOLE!' : 'Jump on the moles!';
+    return this.moles.some((m) => m.kind === 'gold') ? 'GOLD MOLE!' : 'Jump on or shove the moles!';
   }
 
   _extraSnapshot() {

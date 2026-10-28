@@ -1,6 +1,6 @@
 {
   "name": "total-mayhem",
-  "version": "0.12.1",
+  "version": "0.12.3",
   "private": true,
   "description": "TOTAL MAYHEM - an original online party game. Seven minigames and a cosmetic coin shop (server-authoritative multiplayer).",
   "main": "server/index.js",

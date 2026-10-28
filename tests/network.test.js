@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { io } = require('socket.io-client');
 const { createGameServer } = require('../server/app');
+const { decodeSnap } = require('../server/snapcodec');
 
 // ---------------------------------------------------------------- helpers
 async function startServer(config = {}, gameOptions = {}) {
@@ -41,7 +42,8 @@ function connect(url) {
       sock.state = s;
       if (sock.phases[sock.phases.length - 1] !== s.phase) sock.phases.push(s.phase);
     });
-    sock.on('game:snap', (s) => {
+    sock.on('game:snap', (raw) => {
+      const s = decodeSnap(raw); // snapshots travel in a smaller form (see server/snapcodec.js)
       sock.snaps.push(s);
       if (sock.snaps.length > 400) sock.snaps.shift();
     });

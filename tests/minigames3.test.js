@@ -805,7 +805,8 @@ test('every new game can run inside a real Room (intro, play, results) without e
   const cfgBase = require('../server/config');
   for (const id of Object.keys(NEW)) {
     const sent = [];
-    const io = { to: () => ({ emit: (ev, data) => sent.push([ev, data]) }) };
+    const sink = { emit: (ev, data) => sent.push([ev, data]) };
+    const io = { to: () => ({ ...sink, volatile: sink }) };
     const room = new Room(io, 'TEST', { ...cfgBase, INTRO_MS: 10, PITSTOP_MS: 0, SCHEDULE_OVERRIDE: [{ game: id, variant: 'classic' }], ROUND_END_DELAY_MS: 10 }, { timeScale: 40 });
     const p1 = room.addPlayer({ name: 'A' });
     room.addPlayer({ name: 'B' });
@@ -823,4 +824,47 @@ test('every new game can run inside a real Room (intro, play, results) without e
     const state = room.publicState();
     JSON.stringify(state);
   }
+});
+
+test('Mole Stomp: you can SHOVE a risen mole to whack it (gold pays 3, red bites), but not a rumbling one or one out of reach', () => {
+  const [bx, by] = MoleStomp.BURROWS[4];
+  const setup = (kind, age, dx = -60) => {
+    const g = make(MoleStomp, 2);
+    g.nextSpawn = 999;
+    moleAt(g, kind, 4, age);
+    place(g.players.get('p2'), 60, 100);
+    const a = g.players.get('p1');
+    place(a, bx + dx, by, dx < 0 ? 1 : -1, 0);
+    return { g, a };
+  };
+  let { g, a } = setup('mole', 0.7);
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 1, 'a shove whacked the mole');
+  assert.equal(g.moles.length, 0);
+  assert.equal(a.jumps, 0, 'no jump needed');
+
+  ({ g, a } = setup('gold', 0.7));
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 3);
+  assert.equal(a.golds, 1);
+
+  ({ g, a } = setup('red', 0.7));
+  a.points = 2;
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 0, 'a red mole bites even when shoved');
+  assert.ok(a.stun > 0);
+
+  ({ g, a } = setup('mole', 0.2)); // still rumbling
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 0);
+  assert.equal(g.moles.length, 1);
+
+  ({ g, a } = setup('mole', 0.7, -400)); // far away
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 0);
+
+  ({ g, a } = setup('mole', 0.7)); // facing the wrong way
+  a.fx = -1;
+  tap(g, 'p1', 'shove');
+  assert.equal(a.points, 0, 'the mole is behind you');
 });
