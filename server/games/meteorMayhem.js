@@ -68,12 +68,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { firstAt: 0.8, startEvery: 0.95, minEvery: 0.26, fuse: 0.95, radius: 98, blastSpeed: 820, hitStun: 1.1, hitImmune: 0.7, doubleAfter: 12, maxActive: 14, aimAtPlayer: 0.75 };
+
 class MeteorMayhem extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.meteors = []; // warning circles that have not landed yet
     this.nextId = 1;
@@ -222,6 +226,7 @@ class MeteorMayhem extends ArenaGame {
 
 MeteorMayhem.GAME_ID = 'meteorMayhem';
 MeteorMayhem.TUNING = TUNING;
+MeteorMayhem.RAGE = RAGE;
 MeteorMayhem.VARIANTS = VARIANTS;
 
 module.exports = MeteorMayhem;

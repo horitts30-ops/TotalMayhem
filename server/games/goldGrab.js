@@ -60,12 +60,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { coinCap: 8, spawnEvery: 0.95, dropMax: 5, dropLock: 0.5, jackpotEvery: 20, jackpotLife: 6 };
+
 class GoldGrab extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.coins = [];
     this.nextCoinId = 1;
@@ -204,7 +208,7 @@ class GoldGrab extends ArenaGame {
         jackpot: false,
         dropped: true,
         lockId: victim.id,
-        lockUntil: this.time + TUNING.dropLock,
+        lockUntil: this.time + this.cfg.dropLock,
         born: this.time,
       });
     }
@@ -260,6 +264,7 @@ class GoldGrab extends ArenaGame {
 
 GoldGrab.GAME_ID = 'goldGrab';
 GoldGrab.TUNING = TUNING;
+GoldGrab.RAGE = RAGE;
 GoldGrab.VARIANTS = VARIANTS;
 
 module.exports = GoldGrab;

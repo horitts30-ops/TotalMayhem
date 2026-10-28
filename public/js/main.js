@@ -16,7 +16,7 @@ import { Input } from './input.js';
 import { Predictor, arenaWalkable } from './predict.js';
 import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 import { music, sceneFor } from './music.js';
-import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, THEMES } from './constants.js';
+import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, THEMES, EMOTES } from './constants.js';
 import {
   KINDS, KIND_LABEL, loadWallet, saveWallet, owns, credit, buy, nextOwned, sanitizeLook,
   catalogue, nameOf as itemName, priceOf, isUnlockOnly,
@@ -50,6 +50,10 @@ const S = {
   rejoining: false,
   booted: false,
   interp: 90, // current interpolation delay in ms (adapts)
+  chat: [], // text chat messages of this room (newest last)
+  chatUnread: 0,
+  chatOn: true,
+  emotes: new Map(), // player id -> { e (emoji), born, until } for the bubbles above heads
   net: { lastSnapAt: 0, mean: 33, jitter: 4, snapsPerSec: 0, snapCount: 0, ping: null },
   perf: { frames: 0, since: performance.now(), fps: 60, worst: 0, lowWins: 0, goodWins: 0 },
   showPerf: /[?&]debug\b/.test(location.search),
@@ -157,6 +161,19 @@ function animateAvatars(tSec) {
   for (const a of S.avatars) drawPreview(a.canvas, a.getLook(), tSec + a.off, a.mood);
 }
 
+// Things that depend on the room's settings: the Rage Bait look and the emoji button.
+function syncRoomExtras() {
+  const inRoom = !!S.room;
+  document.body.classList.toggle('rage-bait', inRoom && !!S.room.rage);
+  $('rage-badge').classList.toggle('hidden', !(inRoom && S.room.rage));
+  $('emote-btn').classList.toggle('hidden', !inRoom);
+  // Text chat opens only between rounds.
+  const chatPhase = inRoom && ['lobby', 'results', 'pitstop', 'final'].includes(S.room.phase);
+  $('chat').classList.toggle('hidden', !chatPhase);
+  if (chatPhase && !$('chat').classList.contains('closed')) chatClearUnread();
+  if (!inRoom) $('emote-pop').classList.add('hidden');
+}
+
 function showView(v) {
   S.view = v;
   if (v === 'title') {
@@ -168,6 +185,7 @@ function showView(v) {
   $('stage-wrap').classList.toggle('hidden', v !== 'stage');
   document.body.classList.toggle('in-arena', v === 'stage');
   if (v === 'stage') fitStage();
+  syncRoomExtras();
 }
 
 function fitStage() {
@@ -359,7 +377,7 @@ function renderPublicRooms(rooms) {
     const row = el('button', 'public-row');
     row.type = 'button';
     const playing = r.phase !== 'lobby' && r.phase !== 'final';
-    row.appendChild(el('span', 'pr-host', `${r.host}'s room`));
+    row.appendChild(el('span', 'pr-host', `${r.host}'s room${r.rage ? ' \u{1F525}' : ''}`));
     row.appendChild(el('span', 'pr-code', r.code));
     row.appendChild(el('span', 'pr-count', `${r.players}/${r.max}`));
     row.appendChild(el('span', 'pr-state' + (playing ? ' live' : ''), playing ? `Playing (round ${r.round}/${r.rounds})` : 'In the lobby'));
@@ -389,6 +407,10 @@ function leaveToTitle(message) {
   S.room = null;
   S.snaps = [];
   predictor.clear();
+  S.emotes.clear();
+  S.chat = [];
+  S.chatUnread = 0;
+  renderChat();
   input.setEnabled(false);
   renderer.reset();
   $('overlay-intro').classList.add('hidden');
@@ -410,6 +432,7 @@ function renderLobby(st) {
   grid.textContent = '';
   for (const p of st.players) {
     const card = el('div', 'pcard');
+    card.dataset.pid = p.id;
     if (p.id === S.me) card.classList.add('me');
     if (!p.connected) card.classList.add('off');
     if (p.ready) card.classList.add('ready');
@@ -458,6 +481,8 @@ function renderLobby(st) {
   maxSel.disabled = !host;
   $('public-wrap').classList.toggle('hidden', !host);
   $('public-check').checked = !!st.isPublic;
+  $('rage-wrap').classList.toggle('hidden', !host);
+  $('rage-check').checked = !!st.rage;
 
   $('btn-ready').classList.toggle('hidden', host);
   $('btn-ready').textContent = me && me.ready ? 'Ready! (click to undo)' : "I'm ready!";
@@ -981,6 +1006,8 @@ function shopAction() {
 function applyRoomState(st) {
   const prev = S.room;
   S.room = st;
+  syncRoomExtras();
+  if (!prev) loadChatHistory();
   S.phaseEndsAt = performance.now() + st.endsInMs;
   for (const p of st.players) S.meta.set(p.id, { name: p.name, color: p.color, hat: p.hat, skin: p.skin });
 
@@ -1073,6 +1100,278 @@ function onPhaseEnter(prev, st) {
     default:
       break;
   }
+}
+
+// =============================================================== text chat (between rounds)
+function chatClearUnread() {
+  S.chatUnread = 0;
+  $('chat-unread').classList.add('hidden');
+}
+
+function renderChat() {
+  const log = $('chat-log');
+  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  log.textContent = '';
+  if (S.chat.length === 0) log.appendChild(el('div', 'empty', 'No messages yet. Say hi!'));
+  for (const m of S.chat) {
+    const row = el('div', 'msg' + (m.id === S.me ? ' me' : ''));
+    const meta = S.meta.get(m.id);
+    const who = el('b', null, m.name);
+    who.style.color = meta && COLORS[meta.color] ? COLORS[meta.color].hex : '#2a1a3c';
+    row.appendChild(who);
+    row.appendChild(document.createTextNode(m.text)); // text node: a message can never become HTML
+    log.appendChild(row);
+  }
+  if (stick) log.scrollTop = log.scrollHeight;
+  const on = S.chatOn;
+  $('chat-input').disabled = !on;
+  $('chat-note').textContent = on ? '' : 'Chat is switched off on this server right now.';
+}
+
+async function loadChatHistory() {
+  const res = await request('chat:history');
+  if (res && res.ok) {
+    S.chat = res.messages.slice(-40);
+    S.chatOn = res.enabled !== false;
+    renderChat();
+  }
+}
+
+function setupChat() {
+  $('chat-toggle').addEventListener('click', () => {
+    const closed = $('chat').classList.toggle('closed');
+    $('chat-toggle').setAttribute('aria-expanded', String(!closed));
+    if (!closed) {
+      chatClearUnread();
+      const log = $('chat-log');
+      log.scrollTop = log.scrollHeight;
+    }
+  });
+  $('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    const res = await request('chat:send', { text });
+    if (res && res.ok) {
+      input.value = '';
+      $('chat-note').textContent = '';
+    } else {
+      $('chat-note').textContent = (res && res.error) || 'Could not send.';
+    }
+  });
+}
+
+socket.on('chat:msg', (m) => {
+  if (!m || typeof m.text !== 'string' || typeof m.name !== 'string') return;
+  S.chat.push({ n: m.n, id: m.id, name: m.name, text: m.text });
+  if (S.chat.length > 60) S.chat.shift();
+  renderChat();
+  if (m.id !== S.me && $('chat').classList.contains('closed')) {
+    S.chatUnread += 1;
+    const b = $('chat-unread');
+    b.textContent = String(Math.min(S.chatUnread, 99));
+    b.classList.remove('hidden');
+  }
+});
+socket.on('chat:enabled', (m) => {
+  S.chatOn = !m || m.enabled !== false;
+  renderChat();
+});
+
+// =============================================================== emoji bubbles
+let lastEmoteSent = 0;
+function sendEmote(i) {
+  if (!S.room || !(i >= 0 && i < EMOTES.length)) return;
+  const now = performance.now();
+  if (now - lastEmoteSent < 600) return; // the server also limits this
+  lastEmoteSent = now;
+  socket.emit('chat:emoji', i);
+}
+
+function setupEmotes() {
+  const pop = $('emote-pop');
+  EMOTES.forEach((emoji, i) => {
+    const b = el('button', null, emoji);
+    b.type = 'button';
+    b.title = `Send ${emoji} (key ${i + 1})`;
+    b.appendChild(el('small', null, String(i + 1)));
+    b.addEventListener('click', () => {
+      sendEmote(i);
+      pop.classList.add('hidden');
+    });
+    pop.appendChild(b);
+  });
+  $('emote-btn').addEventListener('click', () => {
+    sfx.click();
+    pop.classList.toggle('hidden');
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const m = /^Digit([1-8])$/.exec(e.code);
+    if (m && S.room) sendEmote(Number(m[1]) - 1);
+  });
+}
+
+socket.on('chat:emoji', (m) => {
+  if (!m || typeof m.id !== 'string' || !Number.isInteger(m.e) || m.e < 0 || m.e >= EMOTES.length) return;
+  const now = performance.now();
+  S.emotes.set(m.id, { e: EMOTES[m.e], born: now, until: now + 2600 });
+  // In the lobby the bubble pops up on that player's card instead.
+  const card = document.querySelector(`#lobby-players .pcard[data-pid="${CSS.escape(m.id)}"]`);
+  if (card) {
+    const old = card.querySelector('.pbubble');
+    if (old) old.remove();
+    const b = el('div', 'pbubble', EMOTES[m.e]);
+    card.appendChild(b);
+    setTimeout(() => b.remove(), 2600);
+  }
+});
+
+let announceTimer = 0;
+socket.on('server:announce', (m) => {
+  if (!m || typeof m.text !== 'string') return;
+  const box = $('announce');
+  box.textContent = `\u{1F4E2} ${m.text.slice(0, 120)}`; // (textContent: never HTML)
+  box.classList.add('show');
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => box.classList.remove('show'), 7000);
+});
+
+// =============================================================== admin panel
+let adminTimer = 0;
+function adminOpen(on) {
+  $('overlay-admin').classList.toggle('hidden', !on);
+  if (!on) {
+    clearInterval(adminTimer);
+    adminTimer = 0;
+  }
+}
+
+function adminShowMain(yes) {
+  $('admin-login').classList.toggle('hidden', yes);
+  $('admin-main').classList.toggle('hidden', !yes);
+  clearInterval(adminTimer);
+  adminTimer = 0;
+  if (yes) {
+    adminRefresh();
+    adminTimer = setInterval(adminRefresh, 3000);
+  }
+}
+
+async function adminRefresh() {
+  const res = await request('admin:status');
+  if (!res || !res.ok) {
+    adminShowMain(false); // lost admin rights (for example after a reconnect)
+    $('admin-error').textContent = 'Please enter the code again.';
+    return;
+  }
+  const st = res.stats;
+  $('admin-chat-toggle').textContent = `Chat: ${st.chatOn ? 'ON (click to switch off)' : 'OFF (click to switch on)'}`;
+  $('admin-chat-toggle').dataset.on = st.chatOn ? '1' : '0';
+  const mins = Math.floor(st.uptimeSec / 60);
+  const stats = $('admin-stats');
+  stats.textContent = '';
+  for (const t of [`Up ${mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}`, `${st.rooms}/${st.maxRooms} rooms`, `${st.connected} players online`, `${st.sockets} connections`, `${st.memoryMB} MB memory`]) {
+    stats.appendChild(el('span', null, t));
+  }
+  const box = $('admin-rooms');
+  box.textContent = '';
+  if (res.rooms.length === 0) box.appendChild(el('div', 'public-empty', 'No rooms right now.'));
+  for (const r of res.rooms) {
+    const card = el('div', 'admin-room');
+    const h = el('h4');
+    h.appendChild(el('b', null, r.code));
+    h.appendChild(el('span', null, `${r.host}'s room`));
+    h.appendChild(el('span', 'tag', r.phase === 'lobby' || r.phase === 'final' ? r.phase : `round ${r.round}/${r.rounds} (${r.phase})`));
+    if (r.isPublic) h.appendChild(el('span', 'tag', 'public'));
+    if (r.rage) h.appendChild(el('span', 'tag rage', 'rage bait'));
+    h.appendChild(el('span', 'tag', `${r.players.length}/${r.max}`));
+    h.appendChild(el('span', 'grow'));
+    const view = el('button', null, `Chat (${r.chatCount})`);
+    view.type = 'button';
+    view.style.background = '#cfe8ff';
+    view.addEventListener('click', async () => {
+      const old = card.querySelector('.admin-chatlog');
+      if (old) return old.remove();
+      const res2 = await request('admin:chat', { code: r.code });
+      const box2 = el('div', 'admin-chatlog');
+      if (res2 && res2.ok && res2.messages.length) for (const m of res2.messages) box2.appendChild(el('div', null, `${m.name}: ${m.text}`));
+      else box2.appendChild(el('div', null, 'No messages.'));
+      card.appendChild(box2);
+    });
+    h.appendChild(view);
+    const close = el('button', null, 'Close room');
+    close.type = 'button';
+    close.addEventListener('click', async () => {
+      if (!window.confirm(`Close room ${r.code} and send everybody in it back to the title screen?`)) return;
+      await request('admin:close', { code: r.code });
+      adminRefresh();
+    });
+    h.appendChild(close);
+    card.appendChild(h);
+    for (const p of r.players) {
+      const chip = el('span', 'admin-player' + (p.connected ? '' : ' off'), p.name);
+      const kick = el('button', null, 'Kick');
+      kick.type = 'button';
+      kick.addEventListener('click', async () => {
+        await request('admin:kick', { code: r.code, playerId: p.id });
+        adminRefresh();
+      });
+      chip.appendChild(kick);
+      card.appendChild(chip);
+    }
+    box.appendChild(card);
+  }
+}
+
+function setupAdmin() {
+  $('admin-link').addEventListener('click', () => {
+    adminOpen(true);
+    $('admin-error').textContent = '';
+    $('admin-code').value = '';
+    // If this connection is already unlocked, go straight to the panel.
+    request('admin:status').then((res) => {
+      adminShowMain(!!(res && res.ok));
+      if (!(res && res.ok)) $('admin-code').focus();
+    });
+  });
+  $('admin-close').addEventListener('click', () => adminOpen(false));
+  $('overlay-admin').addEventListener('click', (e) => {
+    if (e.target === $('overlay-admin')) adminOpen(false);
+  });
+  $('admin-login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('admin-code').value;
+    $('admin-code').value = '';
+    const res = await request('admin:login', { code });
+    if (res && res.ok) {
+      $('admin-error').textContent = '';
+      adminShowMain(true);
+    } else {
+      $('admin-error').textContent = (res && res.error) || 'Could not check the code.';
+    }
+  });
+  $('admin-chat-toggle').addEventListener('click', async () => {
+    const turnOn = $('admin-chat-toggle').dataset.on !== '1';
+    await request('admin:chatToggle', { on: turnOn });
+    adminRefresh();
+  });
+  $('admin-logout').addEventListener('click', async () => {
+    await request('admin:logout');
+    adminShowMain(false);
+    $('admin-code').focus();
+  });
+  $('admin-announce-btn').addEventListener('click', async () => {
+    const text = $('admin-announce-text').value;
+    const res = await request('admin:announce', { text });
+    if (res && res.ok) {
+      $('admin-announce-text').value = '';
+      toast('Announcement sent.');
+    } else toast((res && res.error) || 'Could not send.');
+  });
 }
 
 // =============================================================== snapshots
@@ -1512,6 +1811,7 @@ function sampleFrame(now) {
     puddles: latest.s.pd,
     meta: S.meta,
     myId: S.me,
+    emotes: S.emotes,
     arena,
     cols: arena ? arena.cols : 14,
     rows: arena ? arena.rows : 9,
@@ -1777,6 +2077,18 @@ function bindUi() {
     sfx.click();
     refreshPublicRooms();
   });
+  $('rage-check').addEventListener('change', async (e) => {
+    const res = await request('room:rage', e.target.checked);
+    if (!res.ok) {
+      e.target.checked = !e.target.checked;
+      toast(res.error || 'Could not change that.');
+    } else {
+      toast(res.rage ? 'RAGE BAIT is on. Shoves are huge and everything is harder!' : 'Rage Bait is off. Back to normal.');
+    }
+  });
+  setupEmotes();
+  setupChat();
+  setupAdmin();
   $('max-select').addEventListener('change', async (e) => {
     const res = await request('room:max', Number(e.target.value));
     if (!res.ok) {
@@ -1848,6 +2160,7 @@ async function tryRejoin() {
 
 socket.on('connect', async () => {
   $('conn-banner').classList.add('hidden');
+  if (S.room) loadChatHistory(); // catch up on anything said while we were away
   refreshPublicRooms(); // the home page list may have been asked for before we were connected
   if (S.booted) await tryRejoin();
 });

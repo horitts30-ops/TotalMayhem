@@ -24,6 +24,16 @@ server
       }
     }
     console.log('');
+    const lock = server.admin;
+    if (lock.tooShort) console.log('  (ADMIN_CODE is too short - it needs 6+ characters - so a random one is used instead.)');
+    if (lock.generated) {
+      console.log(`  ADMIN CODE (only for you; new every start): ${lock.code}`);
+      console.log('  Use it with the small "Admin" link on the title screen.');
+      console.log('  To pick your own: set ADMIN_CODE (see the README, "Admin panel").');
+    } else {
+      console.log('  Admin panel: ON (the code is the ADMIN_CODE you set).');
+    }
+    console.log('');
     console.log('  Press Ctrl+C to stop.');
     console.log('');
   })

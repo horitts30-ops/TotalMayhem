@@ -102,9 +102,9 @@ function createGame(slot, participants, options) {
 }
 
 // Most games have one fixed arena; a few (Lap Dash: the hurdles) depend on the variant.
-function arenaFor(slot) {
+function arenaFor(slot, opts = {}) {
   const Game = GAMES[slot.game];
-  return typeof Game.arenaFor === 'function' ? Game.arenaFor(slot.variant) : Game.arena;
+  return typeof Game.arenaFor === 'function' ? Game.arenaFor(slot.variant, opts) : Game.arena;
 }
 
 module.exports = { GAMES, SCHEDULE_POOL, buildSchedule, describeSlot, createGame, arenaFor };

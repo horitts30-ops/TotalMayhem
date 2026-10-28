@@ -31,6 +31,18 @@ module.exports = {
   RECONNECT_GRACE_MS: 30000, // how long a dropped player keeps their seat
   EMPTY_ROOM_TTL_MS: 60000, // how long a room with nobody connected lives
 
+  // Admin panel: set the secret code with the ADMIN_CODE environment variable (6+ characters).
+  // If it is not set, the server invents a random one at startup and prints it in the terminal.
+  ADMIN_CODE: process.env.ADMIN_CODE || '',
+
+  // Text chat between rounds (the server admin can also switch it off while running)
+  CHAT_ENABLED: true,
+  CHAT_GAP_MS: 1200, // least time between two messages from one player
+  CHAT_FILTER: true, // mask a short list of swear words (see server/chat.js)
+
+  // Emoji bubbles: the least time between two of them from one player
+  EMOTE_GAP_MS: 600,
+
   // Safety: ignore a socket that spams more than this many inputs per second
   INPUT_RATE_LIMIT: 120,
 

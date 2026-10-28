@@ -77,12 +77,16 @@ function sweptOver(from, delta, phi) {
   return delta >= 0 ? d > 0 && d <= delta : d < 0 && d >= delta;
 }
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { startSpeed: 2.1, ramp: 0.05, maxSpeed: 4.6, tangleKnock: 560, tangleStun: 0.8, graceTime: 0.45 };
+
 class JumpRope extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.cx = WORLD_W / 2;
     this.cy = WORLD_H / 2;
@@ -226,6 +230,7 @@ class JumpRope extends ArenaGame {
 
 JumpRope.GAME_ID = 'jumpRope';
 JumpRope.TUNING = TUNING;
+JumpRope.RAGE = RAGE;
 JumpRope.VARIANTS = VARIANTS;
 JumpRope.sweptOver = sweptOver;
 

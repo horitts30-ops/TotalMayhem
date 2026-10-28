@@ -69,12 +69,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { bombChance: 0.3, digTime: 1.7, stillSpeed: 50, blastRadius: 150, blastKnock: 700, spawnEvery: 2.2, maxSpots: 6, startSpots: 4, bombPenalty: 3 };
+
 class DigDash extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.spots = [];
     this.nextSpotId = 1;
@@ -251,6 +255,7 @@ class DigDash extends ArenaGame {
 
 DigDash.GAME_ID = 'digDash';
 DigDash.TUNING = TUNING;
+DigDash.RAGE = RAGE;
 DigDash.VARIANTS = VARIANTS;
 
 module.exports = DigDash;

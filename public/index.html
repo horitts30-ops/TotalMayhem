@@ -59,7 +59,9 @@
         <span><b>WASD</b>/<b>Arrows</b> move</span>
         <span><b>Space</b> jump</span>
         <span><b>E</b>/<b>Shift</b> shove</span>
+        <span><b>1-8</b> emoji</span>
       </div>
+      <button id="admin-link" class="admin-link" type="button">Admin</button>
     </div>
   </section>
 
@@ -97,6 +99,9 @@
       </div>
 
       <div class="lobby-foot">
+        <label id="rage-wrap" class="inline-field check rage" title="Much stronger shoves and much harder minigames. Everybody in the room plays by the same rules.">
+          <input type="checkbox" id="rage-check"> &#128293; Rage Bait
+        </label>
         <label id="public-wrap" class="inline-field check" title="Show this room on the home page so anybody can join">
           <input type="checkbox" id="public-check"> Public room
         </label>
@@ -123,6 +128,7 @@
         <div id="hud-round" class="pill"></div>
         <div id="hud-timer" class="timer">75</div>
         <div id="hud-alive" class="pill"></div>
+        <div id="rage-badge" class="rage-badge hidden" title="Rage Bait mode is on">&#128293; RAGE BAIT</div>
         <div id="hud-bottom">
           <div id="hud-abilities">
             <div class="ability stamina" id="stamina" title="Jumping and shoving both spend stamina">
@@ -237,6 +243,49 @@
       <p class="shop-note">Some trophies give a special hat or skin that coins cannot buy. Wins and finished matches only count when other players are in the room.</p>
     </div>
   </div>
+
+  <!-- ============================== ADMIN ================================= -->
+  <div id="overlay-admin" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Admin panel">
+    <div class="shop-panel admin-panel">
+      <div class="shop-head">
+        <h2>Admin</h2>
+        <button id="admin-close" class="btn small ghost" type="button">Close</button>
+      </div>
+      <form id="admin-login" class="admin-login" autocomplete="off">
+        <p>Enter the secret admin code. It is shown in the terminal window where the server runs (or is the <b>ADMIN_CODE</b> you set).</p>
+        <input id="admin-code" type="password" maxlength="60" placeholder="Admin code" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Unlock</button>
+        <div id="admin-error" class="error" role="alert"></div>
+      </form>
+      <div id="admin-main" class="admin-main hidden">
+        <div id="admin-stats" class="admin-stats"></div>
+        <div class="admin-announce"><button id="admin-chat-toggle" class="btn small" type="button">Chat: ...</button><span class="admin-hint">Switch the text chat on or off for everybody on this server.</span></div>
+        <div class="admin-announce">
+          <input id="admin-announce-text" maxlength="120" placeholder="Announcement for everybody online (max 120 characters)" autocomplete="off">
+          <button id="admin-announce-btn" class="btn small" type="button">Send</button>
+        </div>
+        <div id="admin-rooms" class="admin-rooms"></div>
+        <div class="admin-foot"><button id="admin-logout" class="btn small ghost" type="button">Lock admin again</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="announce" class="announce"></div>
+  <!-- ============================== CHAT (between rounds) ================== -->
+  <div id="chat" class="chat hidden">
+    <button id="chat-toggle" class="chat-head" type="button" aria-expanded="true">&#128172; Chat <span id="chat-unread" class="chat-unread hidden">0</span></button>
+    <div id="chat-body" class="chat-body">
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <input id="chat-input" maxlength="140" placeholder="Say something nice..." autocomplete="off" spellcheck="true">
+        <button class="btn small" type="submit">Send</button>
+      </form>
+      <div id="chat-note" class="chat-note"></div>
+    </div>
+  </div>
+
+  <div id="emote-pop" class="emote-pop hidden" role="menu" aria-label="Send an emoji"></div>
+  <button id="emote-btn" class="mute emote hidden" title="Emoji (keys 1-8)" aria-label="Send an emoji">&#128512;</button>
 
   <div id="unlocks" class="unlocks" aria-live="polite"></div>
   <div id="conn-banner" class="conn hidden">Connection lost. Reconnecting&hellip;</div>

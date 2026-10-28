@@ -1123,6 +1123,7 @@ export class Renderer {
     const ctx = this.ctx;
     this.clock += dt;
     this.cols = frame.cols;
+    this.emotes = frame.emotes || null; // emoji bubbles (player id -> { e, born, until })
     ctx.setTransform(this.px, 0, 0, this.px, 0, 0);
     const theme = THEMES[frame.theme] || THEMES.sunny;
 
@@ -2562,6 +2563,56 @@ export class Renderer {
     }
   }
 
+  // A little speech bubble with an emoji above a player's head (pops in, floats, fades out).
+  drawEmote(ctx, id, x, y) {
+    const em = this.emotes && this.emotes.get(id);
+    if (!em) return;
+    const now = performance.now();
+    if (now >= em.until) {
+      this.emotes.delete(id);
+      return;
+    }
+    const age = (now - em.born) / 1000;
+    const left = (em.until - now) / 1000;
+    const t = Math.min(1, age / 0.2); // pops in with a little overshoot
+    const scale = Math.max(0.05, 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2));
+    const alpha = Math.min(1, left / 0.4);
+    const bob = Math.sin(age * 5) * 2.5;
+    const w = 46;
+    const h = 40;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y + bob);
+    ctx.scale(scale, scale);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    const r = 14;
+    ctx.moveTo(-w / 2 + r, -h / 2);
+    ctx.lineTo(w / 2 - r, -h / 2);
+    ctx.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+    ctx.lineTo(w / 2, h / 2 - r);
+    ctx.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+    ctx.lineTo(8, h / 2);
+    ctx.lineTo(0, h / 2 + 10); // the little tail pointing at the player
+    ctx.lineTo(-8, h / 2);
+    ctx.lineTo(-w / 2 + r, h / 2);
+    ctx.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+    ctx.lineTo(-w / 2, -h / 2 + r);
+    ctx.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = `26px ${FONT}, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000';
+    ctx.fillText(em.e, 0, 2);
+    ctx.restore();
+  }
+
   drawPlayer(ctx, p, frame, dt) {
     const meta = frame.meta.get(p.id) || { name: '?', color: 0, hat: 0 };
     const color = COLORS[meta.color % COLORS.length].hex;
@@ -2730,6 +2781,7 @@ export class Renderer {
     if (p.st === 'alive') {
       const top = Math.max(52, 48 + (HAT_HEIGHT[meta.hat] || 0));
       drawNameTag(ctx, meta.name, X, Y - (top + 16) * sy, color, isMe);
+      this.drawEmote(ctx, p.id, X, Y - (top + 16) * sy - 46);
       if (p.rl) this.drawSeekerBadge(ctx, X + (meta.name.length * 4.3 + 18), Y - (top + 16) * sy - 4, !!p.hp);
       if (isMe) {
         const bounce = Math.sin(this.clock * 6) * 3;
@@ -2780,6 +2832,7 @@ export class Renderer {
     ctx.globalAlpha = isMe ? 1 : 0.8;
     drawNameTag(ctx, meta.name, X, Y - 70, color, isMe);
     ctx.restore();
+    this.drawEmote(ctx, p.id, X, Y - 112);
     if (isMe) {
       // goo ammo above the ghost
       for (let i = 0; i < 3; i++) {

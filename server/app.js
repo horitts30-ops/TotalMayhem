@@ -15,6 +15,8 @@ const { Server } = require('socket.io');
 const BASE_CONFIG = require('./config');
 const { RoomManager } = require('./room');
 const { normalizeCode, cleanName } = require('./util');
+const { AdminLock, cleanAnnouncement } = require('./admin');
+const { EMOTES } = require('./emotes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -35,6 +37,8 @@ function createGameServer(options = {}) {
   app.get('/health', (req, res) => res.type('text').send('ok'));
 
   const manager = new RoomManager(io, cfg, options.gameOptions);
+  const admin = new AdminLock(cfg.ADMIN_CODE);
+  const startedAt = Date.now();
 
   // ------------------------------------------------------------- sockets
   io.on('connection', (socket) => {
@@ -201,6 +205,127 @@ function createGameServer(options = {}) {
       cb({ ok: true, rooms: manager.listPublic() });
     });
 
+    // ---- emoji bubbles: a fixed list, one every 0.6 s per player ------------------------
+    let lastEmote = 0;
+    on('chat:emoji', (i) => {
+      const { room, player } = lookup();
+      if (!room) return;
+      const now = Date.now();
+      if (now - lastEmote < cfg.EMOTE_GAP_MS) return; // too fast: ignore
+      if (!Number.isInteger(i) || i < 0 || i >= EMOTES.length) return;
+      lastEmote = now;
+      io.to(room.code).emit('chat:emoji', { id: player.id, e: i });
+    });
+
+    // ---- text chat between rounds (see server/chat.js for the safety rules) ----------------
+    on('chat:send', (data, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.postChat(player.id, data && typeof data === 'object' ? data.text : '', manager.chatOn);
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('chat:history', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const { room } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      cb({ ok: true, messages: room.chat, enabled: manager.chatOn });
+    });
+
+    // ---- admin panel: nothing works until the secret code was accepted on THIS connection ----
+    const addr = socket.handshake && socket.handshake.address ? String(socket.handshake.address) : 'unknown';
+    const isAdmin = () => socket.data.admin === true;
+    const adminOnly = (cb, fn) => {
+      cb = cbOf(cb);
+      if (!isAdmin()) return cb({ ok: false, error: 'Not allowed.' });
+      return fn(cb);
+    };
+    on('admin:login', (data, cb) => {
+      cb = cbOf(cb);
+      const res = admin.attempt(addr, data && typeof data === 'object' ? data.code : '');
+      if (res.ok) {
+        socket.data.admin = true;
+        log(`[admin] login accepted (${addr})`);
+        return cb({ ok: true });
+      }
+      log(`[admin] WRONG code from ${addr}`);
+      cb({ ok: false, error: res.locked ? `Too many wrong tries. Try again in ${res.locked} seconds.` : 'That code is not right.', locked: res.locked || 0 });
+    });
+    on('admin:logout', (data, cb) => {
+      socket.data.admin = false;
+      cbOf(typeof data === 'function' ? data : cb)({ ok: true });
+    });
+    on('admin:status', (data, cb) =>
+      adminOnly(typeof data === 'function' ? data : cb, (reply) => {
+        const rooms = manager.overview();
+        let players = 0;
+        let connected = 0;
+        for (const r of manager.rooms.values()) {
+          players += r.players.size;
+          connected += r.connectedPlayers().length;
+        }
+        reply({
+          ok: true,
+          stats: {
+            uptimeSec: Math.round((Date.now() - startedAt) / 1000),
+            rooms: manager.rooms.size,
+            maxRooms: cfg.MAX_ROOMS,
+            players,
+            connected,
+            sockets: io.engine ? io.engine.clientsCount : 0,
+            memoryMB: Math.round(process.memoryUsage().rss / 1048576),
+            node: process.version,
+            chatOn: manager.chatOn,
+          },
+          rooms,
+        });
+      })
+    );
+    on('admin:chat', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const room = manager.get(normalizeCode(data && data.code));
+        reply(room ? { ok: true, messages: room.chat } : { ok: false, error: 'That room is gone.' });
+      })
+    );
+    on('admin:chatToggle', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        manager.chatOn = data && data.on === true;
+        log(`[admin] chat is now ${manager.chatOn ? 'ON' : 'OFF'}`);
+        io.emit('chat:enabled', { enabled: manager.chatOn });
+        reply({ ok: true, chatOn: manager.chatOn });
+      })
+    );
+    on('admin:kick', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const ok = manager.kickPlayer(normalizeCode(data && data.code), data && typeof data.playerId === 'string' ? data.playerId : '');
+        log(`[admin] kick ${data && data.code}/${data && data.playerId}: ${ok}`);
+        reply(ok ? { ok: true } : { ok: false, error: 'That player is no longer there.' });
+      })
+    );
+    on('admin:close', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const ok = manager.closeRoom(normalizeCode(data && data.code));
+        log(`[admin] close room ${data && data.code}: ${ok}`);
+        reply(ok ? { ok: true } : { ok: false, error: 'That room is already gone.' });
+      })
+    );
+    on('admin:announce', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const text = cleanAnnouncement(data && data.text);
+        if (!text) return reply({ ok: false, error: 'Write a message first.' });
+        io.emit('server:announce', { text });
+        log(`[admin] announcement: ${text}`);
+        reply({ ok: true });
+      })
+    );
+
+    on('room:rage', (on_, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setRage(player.id, on_ === true);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, rage: room.rage });
+    });
+
     on('room:max', (n, cb) => {
       const { room, player } = lookup();
       if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
@@ -280,6 +405,7 @@ function createGameServer(options = {}) {
     io,
     manager,
     cfg,
+    admin,
     start(port = cfg.PORT, host = '0.0.0.0') {
       return new Promise((resolve, reject) => {
         httpServer.once('error', reject);

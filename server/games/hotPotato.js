@@ -58,15 +58,19 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { fuseStart: 6, fuseMin: 3, fuseDecay: 0.06, boomStun: 1.9, boomRadius: 190, boomKnock: 820, passImmune: 0.45, holderSpeed: 1.05, nextAssign: 0.5 };
+
 class HotPotato extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
+    this.cfg = { ...TUNING, ...(this.rage ? RAGE : {}) };
     this.holderId = null;
     this.fuse = 0;
     this.fuseMax = 1;
-    this.assignAt = TUNING.firstAssign;
+    this.assignAt = this.cfg.firstAssign;
     for (const p of this.players.values()) {
       p.strikes = 0;
       p.holdTime = 0;
@@ -116,14 +120,14 @@ class HotPotato extends ArenaGame {
       if (this.time >= this.assignAt) this._assignBomb(null);
       return;
     }
-    h.speedMul = TUNING.holderSpeed;
+    h.speedMul = this.cfg.holderSpeed;
     h.holdTime += dt;
     this.fuse -= dt;
     if (this.fuse <= 0) this._boom(h);
   }
 
   _newFuse() {
-    return Math.max(TUNING.fuseMin, TUNING.fuseStart - TUNING.fuseDecay * Math.max(0, this.time));
+    return Math.max(this.cfg.fuseMin, this.cfg.fuseStart - this.cfg.fuseDecay * Math.max(0, this.time));
   }
 
   // Give the bomb to a random player among those with the fewest booms.
@@ -137,7 +141,7 @@ class HotPotato extends ArenaGame {
     this.holderId = pick.id;
     this.fuseMax = this._newFuse();
     this.fuse = this.fuseMax;
-    pick.passImmune = this.time + TUNING.passImmune;
+    pick.passImmune = this.time + this.cfg.passImmune;
     this.events.push({ k: 'bomb', id: pick.id, x: r1(pick.x), y: r1(pick.y), start: true });
   }
 
@@ -154,7 +158,7 @@ class HotPotato extends ArenaGame {
 
   _boom(h) {
     h.strikes++;
-    h.stun = TUNING.boomStun;
+    h.stun = this.cfg.boomStun;
     h.kx = 0;
     h.ky = 0;
     this.events.push({ k: 'boom', id: h.id, x: r1(h.x), y: r1(h.y) });
@@ -163,16 +167,16 @@ class HotPotato extends ArenaGame {
       const dx = q.x - h.x;
       const dy = q.y - h.y;
       const d = Math.hypot(dx, dy);
-      if (d > TUNING.boomRadius) continue;
+      if (d > this.cfg.boomRadius) continue;
       const ux = d > 1 ? dx / d : 1;
       const uy = d > 1 ? dy / d : 0;
-      const k = 1 - d / TUNING.boomRadius / 2; // weaker the further away
-      q.kx = ux * TUNING.boomKnock * k;
-      q.ky = uy * TUNING.boomKnock * k;
+      const k = 1 - d / this.cfg.boomRadius / 2; // weaker the further away
+      q.kx = ux * this.cfg.boomKnock * k;
+      q.ky = uy * this.cfg.boomKnock * k;
       q.stun = Math.max(q.stun, 0.3);
     }
     this.holderId = null;
-    this.assignAt = this.time + TUNING.nextAssign;
+    this.assignAt = this.time + this.cfg.nextAssign;
     this.lastBoomId = h.id;
   }
 
@@ -186,8 +190,8 @@ class HotPotato extends ArenaGame {
   _onHit(attacker, victim) {
     if (attacker.id !== this.holderId) return;
     this.holderId = victim.id;
-    victim.passImmune = this.time + TUNING.passImmune;
-    attacker.passImmune = this.time + TUNING.passImmune; // ...and you cannot be handed it straight back
+    victim.passImmune = this.time + this.cfg.passImmune;
+    attacker.passImmune = this.time + this.cfg.passImmune; // ...and you cannot be handed it straight back
     attacker.passes++;
     this.events.push({ k: 'bomb', id: victim.id, from: attacker.id, x: r1(victim.x), y: r1(victim.y) });
   }
@@ -238,6 +242,7 @@ class HotPotato extends ArenaGame {
 
 HotPotato.GAME_ID = 'hotPotato';
 HotPotato.TUNING = TUNING;
+HotPotato.RAGE = RAGE;
 HotPotato.VARIANTS = VARIANTS;
 
 module.exports = HotPotato;

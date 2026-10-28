@@ -71,12 +71,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { rumble: 0.4, lifeStart: 0.95, lifeEnd: 0.6, spawnStart: 0.75, spawnEnd: 0.4, maxActive: 5, redChance: 0.32, redPenalty: 3, redStun: 0.9 };
+
 class MoleStomp extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.moles = [];
     this.nextId = 1;
@@ -261,6 +265,7 @@ class MoleStomp extends ArenaGame {
 
 MoleStomp.GAME_ID = 'moleStomp';
 MoleStomp.TUNING = TUNING;
+MoleStomp.RAGE = RAGE;
 MoleStomp.VARIANTS = VARIANTS;
 MoleStomp.BURROWS = BURROWS;
 

@@ -541,3 +541,93 @@ input:focus, select:focus { box-shadow: 0 0 0 4px var(--blue); }
 .stamina.low .st-bar i { background: linear-gradient(#ff9a8b, #ff5a4d); }
 .stamina.tired { animation: tired-shake 0.28s linear; }
 @keyframes tired-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+
+/* ===== Rage Bait mode ===== */
+.inline-field.rage { color: #b3261e; font-weight: 900; }
+.rage-badge {
+  position: absolute; left: 20px; top: 66px; z-index: 35; pointer-events: none;
+  background: #d62828; color: #fff; font-weight: 900; letter-spacing: 1px; padding: 5px 16px; border-radius: 14px;
+  border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); animation: ragePulse 1.1s ease-in-out infinite;
+}
+@keyframes ragePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+body.rage-bait #stage::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  box-shadow: inset 0 0 110px 20px rgba(214, 20, 20, 0.62);
+}
+.public-row .pr-rage { font-size: 0.85rem; margin-left: 4px; }
+
+/* ===== Emoji bubbles ===== */
+.mute.emote { bottom: 116px; font-size: 1.3rem; }
+.emote-pop {
+  position: fixed; right: 66px; bottom: 112px; z-index: 31; display: grid; grid-template-columns: repeat(4, 46px); gap: 6px;
+  padding: 8px; background: #fff; border: 4px solid var(--ink); border-radius: 18px; box-shadow: 0 4px 0 var(--ink);
+}
+.emote-pop button {
+  position: relative; width: 46px; height: 46px; font-size: 1.5rem; border: 3px solid var(--ink); border-radius: 12px;
+  background: #fff6d6; cursor: pointer;
+}
+.emote-pop button:hover { background: #ffe58a; transform: translateY(-1px); }
+.emote-pop button small { position: absolute; left: 3px; top: 0; font-size: 0.6rem; font-weight: 900; opacity: 0.7; }
+.pcard { position: relative; }
+.pcard .pbubble {
+  position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-size: 1.7rem; background: #fff;
+  border: 3px solid var(--ink); border-radius: 16px; padding: 0 8px; animation: bubbleIn 0.25s ease-out; z-index: 3;
+}
+@keyframes bubbleIn { from { transform: translateX(-50%) scale(0.3); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+/* ===== Server announcements ===== */
+.announce {
+  position: fixed; left: 50%; top: 56px; transform: translate(-50%, -20px); opacity: 0; pointer-events: none; z-index: 60;
+  background: #ffd23f; color: var(--ink); font-weight: 900; padding: 10px 22px; border-radius: 16px; border: 4px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink); max-width: 90vw; text-align: center; transition: all 0.3s;
+}
+.announce.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== Admin panel ===== */
+.admin-link {
+  display: block; margin: 10px auto 0; background: none; border: 0; color: rgba(42, 26, 60, 0.45); font-weight: 800;
+  font-size: 0.8rem; cursor: pointer; text-decoration: underline;
+}
+.admin-link:hover { color: var(--ink); }
+.admin-panel { max-width: 760px; }
+.admin-login { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 8px 4px 14px; }
+.admin-login input, .admin-announce input {
+  font: inherit; font-weight: 800; padding: 10px 14px; border: 4px solid var(--ink); border-radius: 14px; width: 100%; max-width: 420px;
+}
+.admin-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.admin-stats span { background: #fff6d6; border: 3px solid var(--ink); border-radius: 12px; padding: 3px 10px; font-weight: 800; font-size: 0.9rem; }
+.admin-announce { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.admin-rooms { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.admin-room { border: 3px solid var(--ink); border-radius: 14px; padding: 8px 10px; background: #fff; }
+.admin-room h4 { margin: 0 0 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.95rem; }
+.admin-room h4 .grow { flex: 1; }
+.admin-room .tag { font-size: 0.72rem; background: #e8e1f5; border-radius: 8px; padding: 1px 7px; }
+.admin-room .tag.rage { background: #ffd0cc; }
+.admin-player { display: inline-flex; gap: 6px; align-items: center; margin: 2px 6px 2px 0; padding: 2px 4px 2px 10px; background: #f4f0ff; border-radius: 10px; font-weight: 700; }
+.admin-player.off { opacity: 0.5; }
+.admin-player button, .admin-room h4 button { font: inherit; font-size: 0.75rem; font-weight: 900; border: 2px solid var(--ink); border-radius: 8px; background: #ffb4a8; cursor: pointer; padding: 1px 8px; }
+.admin-foot { margin-top: 10px; }
+
+/* ===== Text chat (between rounds) ===== */
+.chat {
+  position: fixed; left: 12px; bottom: 12px; z-index: 38; width: min(320px, calc(100vw - 90px));
+  background: #fff; border: 4px solid var(--ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ink); overflow: hidden;
+}
+.chat-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 12px; font: inherit; font-weight: 900; border: 0;
+  background: #ffe58a; cursor: pointer; text-align: left;
+}
+.chat-unread { background: #d62828; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 0.8rem; }
+.chat-body { display: flex; flex-direction: column; }
+.chat.closed .chat-body { display: none; }
+.chat-log { height: 100px; overflow-y: auto; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 0.9rem; word-break: break-word; }
+.chat-log .msg b { margin-right: 6px; }
+.chat-log .msg.me { background: #fff6c9; border-radius: 8px; padding: 0 4px; }
+.chat-log .empty { opacity: 0.55; font-weight: 700; }
+.chat-form { display: flex; gap: 6px; padding: 6px; border-top: 3px solid var(--ink); }
+.chat-form input { flex: 1; min-width: 0; font: inherit; font-weight: 700; padding: 6px 10px; border: 3px solid var(--ink); border-radius: 10px; }
+.chat-note { font-size: 0.75rem; font-weight: 700; color: #b3261e; padding: 0 10px 4px; min-height: 0; }
+.chat-note:empty { display: none; }
+.admin-hint { font-size: 0.8rem; opacity: 0.7; font-weight: 700; }
+.admin-chatlog { margin-top: 6px; background: #f4f0ff; border-radius: 10px; padding: 6px 10px; font-size: 0.85rem; max-height: 140px; overflow-y: auto; }
+.admin-chatlog div { margin: 1px 0; }

@@ -51,12 +51,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { splatTiles: 7, catchUpGap: 999 };
+
 class PaintPanic extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     // Which tiles can be painted (the ones that exist in the rounded arena).
     this.paintable = [];
@@ -194,6 +198,7 @@ class PaintPanic extends ArenaGame {
 
 PaintPanic.GAME_ID = 'paintPanic';
 PaintPanic.TUNING = TUNING;
+PaintPanic.RAGE = RAGE;
 PaintPanic.VARIANTS = VARIANTS;
 
 module.exports = PaintPanic;

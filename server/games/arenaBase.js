@@ -29,6 +29,7 @@
 const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
 const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
+const { rageVariant } = require('../rage');
 
 // ----- Arena (same size and shape as Crumble Floor, so the client can reuse it)
 const TILE = 64;
@@ -104,7 +105,8 @@ class ArenaGame {
    * @param {{maxTime:number}} setup
    */
   constructor(participants, variant, options = {}, setup = { maxTime: 60 }) {
-    this.v = variant;
+    this.rage = options.rage === true; // Rage Bait mode (see server/rage.js)
+    this.v = this.rage ? rageVariant(variant) : variant;
     this.timeScale = options.timeScale > 0 ? options.timeScale : 1;
     this.rng = typeof options.rng === 'function' ? options.rng : Math.random;
     this.maxTime = setup.maxTime;
@@ -406,8 +408,8 @@ class ArenaGame {
       const power = TUNING.shoveSpeed * (this.v.shoveSpeed || 1) * q.mods.sturdy;
       q.kx = (kx / kl) * power;
       q.ky = (ky / kl) * power;
-      q.stun = TUNING.stunTime;
-      q.immune = TUNING.shoveImmune;
+      q.stun = TUNING.stunTime * (this.v.stun || 1);
+      q.immune = TUNING.shoveImmune * (this.v.immune || 1);
       q.hitsTaken++;
       p.hitsDealt++;
       hits++;

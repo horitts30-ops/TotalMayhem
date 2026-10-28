@@ -95,12 +95,16 @@ function buildTrack(cfg) {
   return { cx: CX, cy: CY, a: cfg.trackA, b: cfg.trackB, start, gateRadius: cfg.gateRadius, gates, hurdles, hurdleHalfLen: cfg.hurdleHalfLen, hurdleHalfThick: cfg.hurdleHalfThick };
 }
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { hurdleGaps: [0, 1, 2, 3, 4, 5], tripStun: 1.1, hurdleGrace: 0.6, boost1: 1.03, boost2: 1.06 };
+
 class LapDash extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
     this.track = buildTrack(this.cfg);
 
     // Line everybody up across the start line, facing the way to run.
@@ -146,9 +150,9 @@ class LapDash extends ArenaGame {
     return ArenaGame.baseArena(TUNING.maxTime, { scoreLabel: 'gates', scoreDir: 'high', track: buildTrack({ ...TUNING }) });
   }
 
-  static arenaFor(variantId) {
+  static arenaFor(variantId, opts = {}) {
     const v = VARIANTS[variantId] || VARIANTS.classic;
-    return ArenaGame.baseArena(TUNING.maxTime, { scoreLabel: 'gates', scoreDir: 'high', track: buildTrack({ ...TUNING, ...v }) });
+    return ArenaGame.baseArena(TUNING.maxTime, { scoreLabel: 'gates', scoreDir: 'high', track: buildTrack({ ...TUNING, ...v, ...(opts.rage ? RAGE : {}) }) });
   }
 
   // ---- rules ---------------------------------------------------------------------
@@ -232,6 +236,7 @@ class LapDash extends ArenaGame {
 
 LapDash.GAME_ID = 'lapDash';
 LapDash.TUNING = TUNING;
+LapDash.RAGE = RAGE;
 LapDash.VARIANTS = VARIANTS;
 LapDash.buildTrack = buildTrack;
 

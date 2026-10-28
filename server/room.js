@@ -17,6 +17,7 @@ const { randomId, makeRoomCode, cleanName, randomSillyName, safeInt } = require(
 const games = require('./games');
 const { roundReward, finalReward } = require('./rewards');
 const powerups = require('./powerups');
+const chat = require('./chat');
 
 class Room {
   constructor(io, code, cfg, gameOptions) {
@@ -28,6 +29,9 @@ class Room {
     this.players = new Map(); // id -> player record (insertion order = join order)
     this.hostId = null;
     this.isPublic = false; // listed on the home page for anybody to join
+    this.chat = []; // the last few chat messages (shown to people who join later)
+    this.chatSeq = 0;
+    this.rage = false; // Rage Bait mode (see server/rage.js): the host switches it on in the lobby
     this.maxPlayers = cfg.MAX_PLAYERS; // the host can lower this in the lobby
 
     this.phase = 'lobby';
@@ -169,6 +173,15 @@ class Room {
     return null;
   }
 
+  // Rage Bait: much stronger shoves and much harder minigames, for everybody in the room.
+  setRage(playerId, on) {
+    if (playerId !== this.hostId) return 'Only the host can change that.';
+    if (this.phase !== 'lobby' && this.phase !== 'final') return 'You can only change that between matches.';
+    this.rage = on === true;
+    this.broadcastState();
+    return null;
+  }
+
   // What the public list shows about this room. Never includes tokens or ids.
   listing() {
     const host = this.players.get(this.hostId);
@@ -177,6 +190,7 @@ class Room {
       host: host ? host.name : '?',
       players: this.connectedPlayers().length,
       max: this.maxPlayers,
+      rage: this.rage,
       phase: this.phase,
       round: this.round,
       rounds: this.rounds,
@@ -192,6 +206,26 @@ class Room {
     if (max < this.players.size) return `There are already ${this.players.size} players in the room.`;
     this.maxPlayers = max;
     this.broadcastState();
+    return null;
+  }
+
+  // Text chat. Returns an error message, or null when the message was posted.
+  postChat(playerId, text, enabled) {
+    const p = this.players.get(playerId);
+    if (!p) return 'Not in this room.';
+    if (!enabled) return 'Chat is switched off on this server right now.';
+    if (!chat.CHAT_PHASES.has(this.phase)) return 'Chat opens between rounds.';
+    const now = Date.now();
+    p.chatTimes = (p.chatTimes || []).filter((t) => now - t < chat.BURST_WINDOW_MS);
+    const last = p.chatTimes[p.chatTimes.length - 1];
+    if ((last && now - last < (this.cfg.CHAT_GAP_MS ?? chat.MIN_GAP_MS)) || p.chatTimes.length >= chat.BURST) return 'Slow down a little!';
+    const clean = chat.cleanChat(text, { filter: this.cfg.CHAT_FILTER !== false });
+    if (!clean) return 'Type something first.';
+    p.chatTimes.push(now);
+    const msg = { n: ++this.chatSeq, id: p.id, name: p.name, text: clean };
+    this.chat.push(msg);
+    if (this.chat.length > chat.HISTORY) this.chat.shift();
+    this.io.to(this.code).emit('chat:msg', msg);
     return null;
   }
 
@@ -253,7 +287,8 @@ class Room {
     this.round += 1;
     this.slot = this.schedule[this.round - 1];
     this.intro = games.describeSlot(this.slot);
-    this.arena = games.arenaFor(this.slot);
+    if (this.rage) this.intro = { ...this.intro, instructions: ['RAGE BAIT: shoves launch you across the arena and everything is harder. Good luck!', ...this.intro.instructions] };
+    this.arena = games.arenaFor(this.slot, { rage: this.rage });
     this.game = null;
     this.participants = new Set();
     this.results = null;
@@ -275,7 +310,7 @@ class Room {
       const pl = this.players.get(p.id);
       if (pl && pl.power.length) mods[p.id] = powerups.combine(pl.power.map((x) => x.id));
     }
-    this.game = games.createGame(this.slot, participants, { ...this.gameOptions, mods });
+    this.game = games.createGame(this.slot, participants, { ...this.gameOptions, mods, rage: this.rage });
     this.phase = 'playing';
     this.finishAt = 0;
     this.phaseEndsAt = 0;
@@ -474,6 +509,7 @@ class Room {
       matchId: this.matchId(),
       hostId: this.hostId,
       isPublic: this.isPublic,
+      rage: this.rage,
       phase: this.phase,
       round: this.round,
       rounds: this.rounds,
@@ -519,6 +555,7 @@ class RoomManager {
     this.cfg = cfg;
     this.gameOptions = gameOptions;
     this.rooms = new Map();
+    this.chatOn = cfg.CHAT_ENABLED !== false; // the server admin can switch chat off for everybody
   }
 
   create() {
@@ -546,6 +583,61 @@ class RoomManager {
     const waiting = (r) => (r.phase === 'lobby' || r.phase === 'final' ? 0 : 1);
     out.sort((a, b) => waiting(a) - waiting(b) || b.players - a.players || a.code.localeCompare(b.code));
     return out.slice(0, limit);
+  }
+
+  // Admin tools -----------------------------------------------------------------
+  // Removes one player from a room and tells their browser (so it goes back to the title screen).
+  kickPlayer(code, playerId, reason = 'The host of this server removed you from the room.') {
+    const room = this.rooms.get(code);
+    const player = room && room.players.get(playerId);
+    if (!room || !player) return false;
+    const sid = player.socketId;
+    room.removePlayer(playerId);
+    this._detach(sid, reason);
+    return true;
+  }
+
+  // Throws everybody out of a room and deletes it.
+  closeRoom(code, reason = 'This room was closed by the server admin.') {
+    const room = this.rooms.get(code);
+    if (!room) return false;
+    const sockets = [...room.players.values()].map((p) => p.socketId);
+    this.rooms.delete(code);
+    for (const sid of sockets) this._detach(sid, reason);
+    return true;
+  }
+
+  _detach(socketId, reason) {
+    if (!socketId) return;
+    this.io.to(socketId).emit('room:kicked', { reason });
+    const s = this.io.sockets && this.io.sockets.sockets && this.io.sockets.sockets.get(socketId);
+    if (s) {
+      if (s.data.roomCode) s.leave(s.data.roomCode);
+      s.data.roomCode = null;
+      s.data.playerId = null;
+    }
+  }
+
+  // Everything the admin panel shows. Never includes reconnect tokens or socket ids.
+  overview() {
+    const rooms = [];
+    for (const room of this.rooms.values()) {
+      const host = room.players.get(room.hostId);
+      rooms.push({
+        code: room.code,
+        host: host ? host.name : '?',
+        phase: room.phase,
+        round: room.round,
+        rounds: room.rounds,
+        isPublic: room.isPublic,
+        rage: room.rage,
+        chatCount: room.chat.length,
+        max: room.maxPlayers,
+        players: [...room.players.values()].map((p) => ({ id: p.id, name: p.name, connected: p.connected })),
+      });
+    }
+    rooms.sort((a, b) => b.players.length - a.players.length || a.code.localeCompare(b.code));
+    return rooms.slice(0, 200);
   }
 
   // Called each server tick.

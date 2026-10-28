@@ -73,12 +73,16 @@ const CONTROLS = [
   { label: 'Swap prop', keys: 'Space (while disguised)' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { hideTime: 6, hiderSpeed: 1.0, bonkStun: 0.6, foundStun: 0.5, smackCooldown: 0.55, decoys: 8 };
+
 class PropHunt extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
     this.perViewer = true; // every player gets their own snapshot (the secret-keeping part)
 
     const ids = [...this.players.keys()];
@@ -438,6 +442,7 @@ class PropHunt extends ArenaGame {
 
 PropHunt.GAME_ID = 'propHunt';
 PropHunt.TUNING = TUNING;
+PropHunt.RAGE = RAGE;
 PropHunt.VARIANTS = VARIANTS;
 
 module.exports = PropHunt;

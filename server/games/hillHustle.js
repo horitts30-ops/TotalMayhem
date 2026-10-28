@@ -57,12 +57,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { radius: 60, moveEvery: 7, warnTime: 1.0, minHop: 320 };
+
 class HillHustle extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, { shoveSpeed: TUNING.shoveSpeed, ...VARIANTS[id] }, options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.zone = { x: ArenaGame.WORLD_W / 2, y: ArenaGame.WORLD_H / 2 };
     this.glide = null; // { fromX, fromY, toX, toY, t }
@@ -144,7 +148,7 @@ class HillHustle extends ArenaGame {
     for (let i = 0; i < 40; i++) {
       const pt = this._randomPoint(m);
       const d = Math.hypot(pt.x - this.zone.x, pt.y - this.zone.y);
-      if (d >= TUNING.minHop) return pt;
+      if (d >= this.cfg.minHop) return pt;
       if (!best || d > best.d) best = { x: pt.x, y: pt.y, d };
     }
     return { x: best.x, y: best.y };
@@ -202,6 +206,7 @@ class HillHustle extends ArenaGame {
 
 HillHustle.GAME_ID = 'hillHustle';
 HillHustle.TUNING = TUNING;
+HillHustle.RAGE = RAGE;
 HillHustle.VARIANTS = VARIANTS;
 
 module.exports = HillHustle;

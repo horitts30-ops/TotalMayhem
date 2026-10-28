@@ -64,12 +64,16 @@ function zoneAt(x, y) {
   return (x < ArenaGame.WORLD_W / 2 ? 0 : 1) + (y < ArenaGame.WORLD_H / 2 ? 0 : 2);
 }
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { callStart: 2.6, callStep: 0.2, callMin: 1.0, checkTime: 0.8, restTime: 0.5, splatStun: 1.4 };
+
 class ColorCall extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.round = 0;
     this.phase = 'rest'; // rest -> call -> check -> rest ...
@@ -214,6 +218,7 @@ class ColorCall extends ArenaGame {
 
 ColorCall.GAME_ID = 'colorCall';
 ColorCall.TUNING = TUNING;
+ColorCall.RAGE = RAGE;
 ColorCall.VARIANTS = VARIANTS;
 ColorCall.ZONE_NAMES = ZONE_NAMES;
 ColorCall.zoneAt = zoneAt;

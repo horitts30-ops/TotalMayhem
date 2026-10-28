@@ -23,6 +23,7 @@
 const { safeNumber } = require('../util');
 const { normalizeMods } = require('../powerups');
 const { STAMINA, initStamina, tickStamina, spendStamina } = require('../stamina');
+const { rageVariant } = require('../rage');
 
 // ----- Arena ---------------------------------------------------------------
 const TILE = 64;
@@ -194,7 +195,8 @@ class CrumbleFloor {
    */
   constructor(participants, variantId = 'classic', options = {}) {
     this.variantId = VARIANTS[variantId] ? variantId : 'classic';
-    this.v = VARIANTS[this.variantId];
+    this.rage = options.rage === true; // Rage Bait mode (see server/rage.js)
+    this.v = this.rage ? rageVariant(VARIANTS[this.variantId]) : VARIANTS[this.variantId];
     this.timeScale = options.timeScale > 0 ? options.timeScale : 1;
 
     this.time = -TUNING.countdown; // negative = 3-2-1 countdown
@@ -534,10 +536,10 @@ class CrumbleFloor {
       const kl = Math.hypot(kx, ky) || 1;
       kx /= kl;
       ky /= kl;
-      q.kx = kx * TUNING.shoveSpeed * q.mods.sturdy;
-      q.ky = ky * TUNING.shoveSpeed * q.mods.sturdy;
-      q.stun = TUNING.stunTime;
-      q.immune = TUNING.shoveImmune;
+      q.kx = kx * TUNING.shoveSpeed * (this.v.shoveSpeed || 1) * q.mods.sturdy;
+      q.ky = ky * TUNING.shoveSpeed * (this.v.shoveSpeed || 1) * q.mods.sturdy;
+      q.stun = TUNING.stunTime * (this.v.stun || 1);
+      q.immune = TUNING.shoveImmune * (this.v.immune || 1);
       q.lastShovedBy = p.id;
       q.lastShovedAt = this.time;
       q.hitsTaken++;

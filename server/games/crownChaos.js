@@ -58,12 +58,16 @@ const CONTROLS = [
   { label: 'Mute', keys: 'M' },
 ];
 
+// Rage Bait mode: the same game, tuned to be much harder (see server/rage.js).
+const RAGE = { overheat: 6, holderSpeed: 0.8, lockout: 0.7, holderShield: 0.4 };
+
 class CrownChaos extends ArenaGame {
   constructor(participants, variantId = 'classic', options = {}) {
     const id = VARIANTS[variantId] ? variantId : 'classic';
     super(participants, VARIANTS[id], options, { maxTime: TUNING.maxTime });
     this.variantId = id;
     this.cfg = { ...TUNING, ...VARIANTS[id] };
+    if (this.rage) Object.assign(this.cfg, RAGE);
 
     this.crown = { x: ArenaGame.WORLD_W / 2, y: ArenaGame.WORLD_H / 2, vx: 0, vy: 0, holder: null, heat: 0, lockId: null, lockUntil: 0 };
     for (const p of this.players.values()) {
@@ -236,6 +240,7 @@ class CrownChaos extends ArenaGame {
 
 CrownChaos.GAME_ID = 'crownChaos';
 CrownChaos.TUNING = TUNING;
+CrownChaos.RAGE = RAGE;
 CrownChaos.VARIANTS = VARIANTS;
 
 module.exports = CrownChaos;

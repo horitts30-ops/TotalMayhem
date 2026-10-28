@@ -59,6 +59,9 @@ export const HATS = [
 ];
 
 // One colour theme per minigame variant (each round looks different).
+// The emoji bubbles (the server only sends the number; it has the same list in server/emotes.js).
+export const EMOTES = ['\u{1F602}', '\u{1F621}', '\u{1F60E}', '\u{1F44D}', '\u{1F62D}', '\u{1F525}', '\u{1F480}', '\u{1F921}'];
+
 export const THEMES = {
   sunny: {
     bg: ['#37b4ff', '#7a5cff'],

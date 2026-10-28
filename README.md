@@ -1,4 +1,4 @@
-# TOTAL MAYHEM  (13 minigames, stamina, public rooms, a coin shop, power-ups, achievements and music)
+# TOTAL MAYHEM  (13 minigames, Rage Bait mode, chat, stamina, public rooms, a coin shop, power-ups, achievements and music)
 
 An original online party game for friends. You open it in a browser, one person
 creates a room, friends join with a 4-letter code, and everybody plays short,
@@ -44,6 +44,7 @@ Stop the server with `Ctrl+C` in the terminal.
 | Shove (also: pass the bomb in Hot Potato; drop goo as a Crumble Floor ghost; **disguise / undisguise** as a Prop Hunt hider; **smack** as the Prop Hunt seeker) | `E` or `Shift` |
 | Music on / off | `N` (or the music button in the bottom-right corner) |
 | Mute / unmute all sound | `M` |
+| Send an emoji bubble | `1` to `8` (or the smiley button in the bottom-right corner) |
 | Show the FPS / ping panel | `F3` |
 
 At the **pit stop** between rounds you use the mouse: click a power-up card to buy it, click it
@@ -188,6 +189,45 @@ Two small marks on the bar show where a jump and a shove would end up.
 * **Big Lungs** (bigger bar) and **Second Wind** (faster refill) are new power-ups for the pit stop.
 * Hiders in Prop Hunt shove for free (their shove is how they disguise), and nobody pays during the hide phase.
 * The numbers are in `server/stamina.js`.
+
+### Rage Bait mode (host setting)
+
+In the lobby the host can tick **Rage Bait**. It is deliberately almost unfair, and it is **the same for everybody in the room**:
+
+* **Shoves hit about 3x as hard**: players fly several tiles, are dizzy more than twice as long, and can be shoved again after 0.5 seconds (combos!).
+* **Everything is slippery** (steering grip is cut to 60%).
+* **Every minigame is retuned to be much harder** (the numbers are in each game's `RAGE` table, plus `server/rage.js`):
+  Crumble Floor's tiles fall much faster; Hot Potato has a shorter fuse and a huge explosion; Meteor Mayhem drops more, faster and bigger meteors;
+  Color Call gives you about a second; Jump Rope Jam spins faster and knocks harder; Lap Dash puts a hurdle in every gap and weakens the rubber band;
+  Dig Dash has far more bombs and slower digging; Mole Stomp has many more biting red moles; Hill Hustle has a smaller hill that moves every 7 seconds;
+  Gold Grab has fewer coins; Crown Chaos overheats sooner; Paint Panic splats 7 tiles per shove and removes the catch-up brush; Prop Hunt hides the seeker's blindfold time shorter.
+* A red **RAGE BAIT** badge and a red glow show that it is on, the intro card warns everybody, and the public list shows a flame.
+* It is still **fair play**: nobody is ever out for good, coins and power-ups work exactly as in a normal match (no extra rewards for suffering), and it can only be switched on or off between matches.
+
+### Emoji bubbles and text chat
+
+* **Emoji bubbles:** press **`1` to `8`** (or click the smiley button) to pop a bubble over your head for 2.5 seconds. There are 8 fixed emojis and no
+  typing, so it is safe to use mid-round. You can send one every 0.6 seconds.
+* **Text chat between rounds:** a chat box appears in the lobby, on the results screen, in the pit stop and on the final scoreboard (never during a round
+  or the intro). Rules, all enforced by the server: plain text only, 140 characters at most, 1 message per 1.2 seconds (5 per 10 seconds), and a basic
+  swear-word filter that masks whole words (`server/chat.js`, add your own words to `BAD_WORDS`). It is a **basic** filter: it catches things like
+  `f*ck` and `sh1t`, but not every trick, and it does not understand other languages. The last 40 messages are kept for people who join late.
+  Messages are shown as plain text, so nothing a player types can become HTML or a link.
+* The server admin can **switch chat off for everybody** (and read a room's chat) in the admin panel. To start with chat off, set `CHAT_ENABLED: false` in `server/config.js`.
+
+### Admin panel (secret code)
+
+There is a small **Admin** link at the bottom of the title screen. It asks for a **secret code**, and nothing works without it.
+
+* **Where the code comes from:** it is never in the source code. If you do nothing, the server invents a **random code every time it starts** and prints it in the terminal
+  window ("ADMIN CODE ..."). To choose your own (6 or more characters), set `ADMIN_CODE` before starting:
+  Mac/Linux: `ADMIN_CODE="my secret words" npm start`    Windows PowerShell: `$env:ADMIN_CODE="my secret words"; npm start`.
+  On a hosting website, add `ADMIN_CODE` in its environment-variables settings (never write the code into a file you upload or share).
+* **What it can do:** see the server's uptime, rooms, players, memory; see every room (host, phase, players, public/rage tags); **kick** a player; **close** a room;
+  send an **announcement** that pops up for everybody online; **switch chat on/off** and read a room's chat. It never shows reconnect tokens.
+* **How it is protected:** the code is checked on the server in constant time; 5 wrong tries from one connection address lock it out for 5 minutes (twice as long the next
+  time), and 30 wrong tries from anywhere lock everybody out for 10 minutes; admin rights last only for that browser connection (closing or reloading the page locks it again),
+  and every admin action is checked on the server again. Anyone with the code has full admin powers, so keep it private. Admin actions are written to the server's terminal log.
 
 ### Room size (2 to 8 players)
 
@@ -431,7 +471,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **267 automated tests** (about a minute):
+runs **290 automated tests** (about a minute):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -477,6 +517,10 @@ runs **267 automated tests** (about a minute):
 * `tests/predict.test.js` (7 tests) - the movement prediction: replays a whole round against the real server rules
   with 20-100 ms delays and checks the guess is far closer than the old method, walls, smoothing, and that every
   game's snapshot carries the steering info.
+* `tests/rage.test.js` (6 tests) - Rage Bait: shoves ~3x harder, longer stun, harder tables that only change real settings, every game and
+  variant finishing in rage mode with 1-8 players, and Lap Dash's extra hurdles matching what the browser draws.
+* `tests/social.test.js` (17 tests) - the Rage Bait room setting, emoji bubbles (valid, rate-limited, same-room only), the admin lock (wrong codes, lockouts, short or missing
+  codes, no tokens leaked, kick/close/announce), and text chat (phases, filter, limits, history, admin switch).
 * `tests/network.test.js` (28 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
   scoreboard, play again, cheating attempts, input flooding, late joins, disconnect +
@@ -540,6 +584,10 @@ total-mayhem/
       crownChaos.js       ALL the rules of Crown Chaos
       paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
     stamina.js            the shared jump/shove stamina numbers and helpers
+    rage.js               Rage Bait mode physics (each game also has a RAGE table)
+    admin.js              the admin panel's lock (code, lockouts)
+    chat.js               chat rules: length, rate limit, swear filter
+    emotes.js             the 8 emoji bubbles
     rewards.js            how many coins a round / match is worth
     powerups.js           the pit-stop power-ups: catalogue, prices, limits
   public/                 everything the browser downloads
@@ -563,6 +611,8 @@ total-mayhem/
     minigames3.test.js    Paint Panic / Color Call / Jump Rope / Lap Dash / Dig Dash / Mole Stomp tests
     stamina.test.js       jump + shove stamina tests
     predict.test.js       movement prediction tests
+    rage.test.js          Rage Bait tests
+    social.test.js        emoji, chat and admin panel tests
     shop.test.js          coin rewards + shop tests
     powerups.test.js      pit stop + power-up tests
     achievements.test.js  trophy case tests
@@ -680,7 +730,7 @@ ever want coins to follow players between devices, that is the step to take.
 ## 9. What is verified and what is not
 
 **Verified (by me, in a test environment):**
-* All 267 automated tests pass.
+* All 290 automated tests pass.
 * The server starts from a clean install, serves the page, and handles complete matches.
 * The real web page and its scripts, run in a simulated browser against the real server,
   completed the full flow: create room, join, ready, start, intro, countdown 3-2-1-GO,
@@ -731,6 +781,16 @@ ever want coins to follow players between devices, that is the step to take.
 * **Room size and prediction in a real browser:** the lobby's Players menu works for the host, is greyed out for guests, and
   limits joining (tests + Chromium). With a simulated slow connection, movement started on screen about 110 ms sooner. I have
   **not** felt it with my hands, and I have not tested real-internet ping or a crowded 8-player match with prediction on.
+* **Rage Bait, emoji, chat and admin in real Chromium:** the host's checkbox (hidden for guests), the red badge and glow, emoji bubbles over heads in the
+  game and in the lobby, the emoji picker, the chat box appearing between rounds and hiding during rounds, typed text staying text (an injected `<b>` stayed
+  plain), the swear mask, unread counter, a wrong admin code being refused, the right one opening the panel, an announcement appearing for another player,
+  a kick sending that player to the title screen, and the admin chat switch disabling everybody's chat box. No page errors appeared.
+* **Rage Bait is only bot-tested for balance.** The tests prove every minigame still runs and finishes with it on; whether it is funny-hard or just
+  impossible is for you and your friends to judge, and you will want to tune the `RAGE` tables. The red glow is subtle on some floors.
+* **Chat moderation is basic.** The swear filter is a small word list; a determined person can get around it, and it does not know other languages. If kids play,
+  consider switching chat off (`CHAT_ENABLED: false`) or keeping an eye on rooms in the admin panel.
+* **The admin code protects a feature, not your computer:** I tested the lockouts and the permission checks, but I have not had the panel security-reviewed by anyone else.
+  Keep the code secret, and use a long one (random is best) on a public server.
 * I did not test public rooms across the real internet, only on one machine, and did not look at the mobile layout of the new list
   beyond checking that it fits a narrow window.
 
