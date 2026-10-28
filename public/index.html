@@ -6,6 +6,66 @@
   <title>TOTAL MAYHEM</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%AA%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
+  <!-- If the game cannot start (blocked script, old browser, a browser extension, a broken cache...) this shows WHY on screen
+       instead of leaving a blank page. main.js sets window.__tmBooted when it has started. -->
+  <script>
+  (function () {
+    var errs = [];
+    var shown = false;
+    function add(m) { if (errs.length < 8 && errs.indexOf(m) < 0) errs.push(String(m).slice(0, 300)); }
+    function show(headline) {
+      if (shown || window.__tmBooted) return;
+      shown = true;
+      var box = document.createElement('div');
+      box.id = 'boot-error';
+      box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;overflow:auto;background:#fff6e0;color:#2a1d3a;font:16px/1.4 system-ui,sans-serif;padding:24px');
+      var h = document.createElement('h2');
+      h.textContent = headline || 'The game could not start';
+      h.setAttribute('style', 'margin:0 0 8px;font-size:26px');
+      box.appendChild(h);
+      var tips = [
+        'Reload without the saved copy: hold Shift and click Reload (on a Mac: Cmd + Shift + R).',
+        'Turn off ad blockers and other extensions for this site, or try a new Incognito window.',
+        'Update Chrome: open chrome://settings/help and let it finish.',
+        'If it still fails, send the text in the grey box below to whoever runs the game.'
+      ];
+      var ul = document.createElement('ul');
+      tips.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+      box.appendChild(ul);
+      var pre = document.createElement('pre');
+      pre.setAttribute('style', 'background:#e9e4d8;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word;font-size:13px');
+      pre.textContent = ['Browser: ' + navigator.userAgent, 'Page: ' + location.href, 'Socket.IO loaded: ' + (typeof window.io !== 'undefined'),
+        'Modules supported: ' + ('noModule' in document.createElement('script')), 'Problems:'].concat(errs.length ? errs : ['(none reported)']).join('\n');
+      box.appendChild(pre);
+      document.body.appendChild(box);
+    }
+    window.__tmBootFail = show;
+    window.addEventListener('error', function (e) {
+      var t = e.target;
+      if (t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && (t.src || t.href)) { add('could not load ' + (t.src || t.href)); setTimeout(function () { show('A game file could not be loaded'); }, 800); return; }
+      var where = e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : '';
+      add((e.message || 'error') + where);
+      // only react to errors from the game's own files, not from browser extensions
+      if (!e.filename || e.filename.indexOf(location.origin) === 0) setTimeout(function () { show(); }, 1500);
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) { add('promise: ' + ((e.reason && e.reason.message) || e.reason)); });
+    setTimeout(function () { if (!window.__tmBooted) show('The game is taking too long to start'); }, 8000);
+  })();
+  </script>
+  <!-- fetch every script in parallel instead of one after another -->
+  <link rel="modulepreload" href="/js/main.js">
+  <link rel="modulepreload" href="/js/renderer.js">
+  <link rel="modulepreload" href="/js/wardrobe.js">
+  <link rel="modulepreload" href="/js/shop.js">
+  <link rel="modulepreload" href="/js/packs.js">
+  <link rel="modulepreload" href="/js/constants.js">
+  <link rel="modulepreload" href="/js/achievements.js">
+  <link rel="modulepreload" href="/js/audio.js">
+  <link rel="modulepreload" href="/js/music.js">
+  <link rel="modulepreload" href="/js/input.js">
+  <link rel="modulepreload" href="/js/net.js">
+  <link rel="modulepreload" href="/js/predict.js">
+  <link rel="modulepreload" href="/js/snapcodec.js">
 </head>
 <body>
 
@@ -137,6 +197,7 @@
   <!-- ================================ STAGE =============================== -->
   <div id="stage-wrap" class="hidden">
     <div id="stage">
+      <canvas id="bg-canvas"></canvas>
       <canvas id="game-canvas"></canvas>
 
       <div id="hud" class="hidden">
@@ -162,6 +223,7 @@
 
       <div id="overlay-countdown" class="overlay clear hidden"><div id="countdown-text"></div></div>
       <div id="banner" class="banner hidden"></div>
+      <div id="play-warn" class="play-warn hidden" role="alert"></div>
 
       <div id="overlay-intro" class="overlay solid hidden">
         <div class="intro-card">
@@ -255,6 +317,7 @@
         <button id="packs-close" class="btn small ghost" type="button">Close</button>
       </div>
       <div id="pack-list" class="pack-list"></div>
+      <div id="rarity-guide" class="rarity-guide"></div>
       <p id="pack-pity" class="shop-note"></p>
       <p class="shop-note">Packs cost coins you earn by playing. There is no real money in this game. Cards you already own pay some coins back. Everything here is cosmetic: nothing changes how a minigame plays.</p>
       <h3 class="outfit-title">Outfit book <small id="outfit-count"></small></h3>
@@ -273,6 +336,48 @@
         <button id="reveal-all" class="btn small" type="button">Flip all</button>
         <button id="reveal-again" class="btn small hidden" type="button">Open another</button>
         <button id="reveal-done" class="btn" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== TRADE ============================== -->
+  <div id="trade-invite" class="trade-invite hidden" role="alert">
+    <span id="trade-invite-text"></span>
+    <button id="trade-invite-yes" class="btn small" type="button">Trade</button>
+    <button id="trade-invite-no" class="btn small ghost" type="button">No thanks</button>
+  </div>
+
+  <div id="overlay-trade" class="shop-overlay hidden" role="dialog" aria-modal="true" aria-label="Trade">
+    <div class="shop-panel trade-panel">
+      <div class="shop-head">
+        <h2 id="trade-title">Trade</h2>
+        <div class="wallet-chip" title="Your coins"><span class="coin"></span> <b id="trade-coins">0</b></div>
+      </div>
+      <p id="trade-status" class="shop-note"></p>
+      <div class="trade-cols">
+        <div class="trade-col">
+          <h3>You give</h3>
+          <label class="trade-coinbox">Coins <input id="trade-my-coins" type="number" min="0" max="99999" step="1" value="0" inputmode="numeric"></label>
+          <div id="trade-my-items" class="trade-items"></div>
+          <button id="trade-add" class="btn small" type="button">+ Add items</button>
+          <div id="trade-my-state" class="trade-state"></div>
+        </div>
+        <div class="trade-col">
+          <h3 id="trade-their-title">They give</h3>
+          <div id="trade-their-coins" class="trade-theircoins"></div>
+          <div id="trade-their-items" class="trade-items"></div>
+          <div id="trade-their-state" class="trade-state"></div>
+        </div>
+      </div>
+      <div id="trade-picker" class="trade-picker hidden">
+        <div id="trade-tabs" class="shop-tabs"></div>
+        <div id="trade-grid" class="shop-grid"></div>
+      </div>
+      <p id="trade-note" class="trade-note"></p>
+      <p class="shop-note">Only trade with people you trust. Nobody can check what the other person really owns, and a finished trade cannot be undone. Trades are only for coins and items inside the game, never real money.</p>
+      <div class="reveal-actions">
+        <button id="trade-accept" class="btn" type="button">Accept trade</button>
+        <button id="trade-cancel" class="btn small ghost" type="button">Cancel trade</button>
       </div>
     </div>
   </div>
@@ -336,10 +441,11 @@
   <div id="unlocks" class="unlocks" aria-live="polite"></div>
   <div id="conn-banner" class="conn hidden">Connection lost. Reconnecting&hellip;</div>
   <div id="toast" class="toast"></div>
+  <button id="btn-home" class="btn small ghost home-btn hidden" type="button" tabindex="-1" title="Leave this room and go back to the home page">&#127968; Home</button>
   <button id="music-btn" class="mute music" title="Music on / off (N)" aria-label="Toggle music">&#127925;</button>
   <button id="mute-btn" class="mute" title="Mute / unmute all sound (M)" aria-label="Toggle sound">&#128266;</button>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script defer src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/main.js"></script>
   <div id="perf-hud" class="hidden"></div>
 </body>

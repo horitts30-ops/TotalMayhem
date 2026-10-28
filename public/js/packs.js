@@ -24,6 +24,14 @@ import { owns, grant } from './shop.js';
 
 export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const RARITY_LABEL = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+// What each rarity means, in plain words (shown in the "Rarity guide" on the Packs screen).
+export const RARITY_BLURB = [
+  'Everyday silly hats',
+  'More distinctive designs',
+  'Animated or extra-detailed hats',
+  'Big visual effects and unusual designs',
+  'Signature cosmetics with special animations',
+];
 export const RARITY_COLOR = ['#9aa5b1', '#4caf50', '#3a86ff', '#a855f7', '#ffb400'];
 
 // Coins paid back for a card you already own (outfits pay double).
@@ -36,6 +44,7 @@ const EPIC = 3;
 // has at least one card of this rarity or better (0 = common, no guarantee).
 export const PACKS = [
   { id: 'basic', name: 'Basic Pack', price: 120, cards: 3, weights: [70, 25, 5, 0, 0], min: 0, icon: '\u{1F4E6}' },
+  { id: 'classic', name: 'Classic Pack', price: 260, cards: 4, weights: [55, 25, 13, 6, 1], min: 0, icon: '\u{1F3B4}' },
   { id: 'super', name: 'Super Pack', price: 300, cards: 4, weights: [40, 38, 18, 4, 0], min: 1, icon: '\u{1F381}' },
   { id: 'ultra', name: 'Ultra Pack', price: 700, cards: 5, weights: [10, 35, 38, 15, 2], min: 2, icon: '\u{1F48E}' },
   { id: 'legend', name: 'Legend Pack', price: 1500, cards: 5, weights: [0, 20, 45, 28, 7], min: 3, icon: '\u{1F451}' },

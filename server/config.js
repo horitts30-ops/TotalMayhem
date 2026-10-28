@@ -35,6 +35,12 @@ module.exports = {
   // If it is not set, the server invents a random one at startup and prints it in the terminal.
   ADMIN_CODE: process.env.ADMIN_CODE || '',
 
+  // Trades between two players in a room (see server/trade.js)
+  TRADE_MAX_ITEMS: 6, // items each person can put into one trade
+  TRADE_MAX_COINS: 99999,
+  TRADE_TIMEOUT_MS: 180000, // a trade window is closed after 3 minutes
+  TRADE_REQUEST_GAP_MS: 1500, // least time between two trade requests from one player
+
   // Text chat between rounds (the server admin can also switch it off while running)
   CHAT_ENABLED: true,
   CHAT_GAP_MS: 1200, // least time between two messages from one player

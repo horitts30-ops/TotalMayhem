@@ -18,6 +18,7 @@ const { normalizeCode, cleanName } = require('./util');
 const { AdminLock, cleanAnnouncement } = require('./admin');
 const { EMOTES } = require('./emotes');
 const { mapChoices } = require('./maps');
+const { compressedStatic } = require('./static');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -34,7 +35,9 @@ function createGameServer(options = {}) {
   });
 
   app.disable('x-powered-by');
-  app.use(express.static(PUBLIC_DIR));
+  const fast = compressedStatic(PUBLIC_DIR); // smaller downloads (server/static.js); express.static below handles the rest
+  app.use(fast);
+  app.use(express.static(PUBLIC_DIR, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
   app.get('/health', (req, res) => res.type('text').send('ok'));
   app.get('/api/maps', (req, res) => res.json(mapChoices())); // the lobby's map picker reads this
 
@@ -142,6 +145,7 @@ function createGameServer(options = {}) {
       log(`[room ${room.code}] ${player.name} reconnected`);
       cb({ ok: true, code: room.code, playerId: player.id, token: player.token });
       room.broadcastState();
+      room.trades.resend(player.id); // tells this browser about a trade it may have missed while offline
     });
 
     on('room:leave', (data, cb) => {
@@ -207,6 +211,38 @@ function createGameServer(options = {}) {
       if (++listCount > 4) return cb({ ok: false, error: 'Slow down a little.' });
       cb({ ok: true, rooms: manager.listPublic() });
     });
+
+    // ---- trades between two players in a room (see server/trade.js) ----------------------------
+    // At most 20 trade messages per second from one connection, so nobody can flood the room.
+    let tradeWindow = 0;
+    let tradeCount = 0;
+    const tradeOk = () => {
+      const now = Date.now();
+      if (now - tradeWindow >= 1000) {
+        tradeWindow = now;
+        tradeCount = 0;
+      }
+      return ++tradeCount <= 20;
+    };
+    const tradeEvent = (event, run) => {
+      on(event, (data, cb) => {
+        cb = cbOf(typeof data === 'function' ? data : cb);
+        data = data && typeof data === 'object' ? data : {};
+        const { room, player } = lookup();
+        if (!room) return cb({ ok: false, error: 'Not in a room.' });
+        if (!tradeOk()) return cb({ ok: false, error: 'Slow down a little!' });
+        const err = run(room.trades, player.id, data);
+        cb(err ? { ok: false, error: err } : { ok: true });
+      });
+    };
+    tradeEvent('trade:request', (t, id, d) => t.request(id, d.to));
+    tradeEvent('trade:answer', (t, id, d) => t.answer(id, d.id, d.yes === true));
+    tradeEvent('trade:cancel', (t, id, d) => t.cancel(id, d.id));
+    tradeEvent('trade:offer', (t, id, d) => t.offer(id, d.id, { coins: d.coins, items: d.items }));
+    tradeEvent('trade:accept', (t, id, d) => t.accept(id, d.id, d.rev));
+    tradeEvent('trade:commit', (t, id, d) => t.commit(id, d.id, d.rev, d.ok));
+    tradeEvent('trade:ack', (t, id, d) => t.ack(id, d.id));
+    tradeEvent('trade:pending', (t, id) => t.resend(id));
 
     // ---- emoji bubbles: a fixed list, one every 0.6 s per player ------------------------
     let lastEmote = 0;
@@ -427,6 +463,7 @@ function createGameServer(options = {}) {
           // often lets each fixed step run right on time.
           timer = setInterval(loop, Math.max(4, Math.floor(1000 / cfg.TICK_RATE / 3)));
           resolve(httpServer.address().port);
+          if (!options.quiet) setTimeout(() => fast.warm(), 300); // compress the web files in the background
         });
       });
     },

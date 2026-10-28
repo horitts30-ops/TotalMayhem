@@ -1212,13 +1212,20 @@ function drawNameTag(ctx, text, x, y, color, isMe) {
 
 // ------------------------------------------------------------------ renderer
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, bgCanvas = null) {
     this.canvas = canvas;
-    // alpha:false = the picture is always fully painted, so the browser can skip blending it with the page behind
-    this.ctx = canvas.getContext('2d', { alpha: false });
+    // The background lives on its OWN canvas behind this one (bgCanvas): it changes slowly, so it is repainted ~20 times
+    // a second and the browser lays it under the game picture. Before, it was copied into the game picture 60 times a
+    // second, which was the biggest single cost on slower computers. Without a bgCanvas (or in safe mode) the old way is used.
+    this.bgCanvas = bgCanvas;
+    this.bgCtx = null;
+    this.ctx = canvas.getContext('2d', { alpha: !!bgCanvas });
     this.px = 1;
     this.quality = 1; // 0.5 - 1; main.js lowers it automatically if the game runs slowly
     this.cssScale = 1;
+    // safe = paint everything straight onto the screen, without the offscreen speed-up pictures below.
+    // main.js switches this on by itself if drawing ever fails on someone's computer (see loop()).
+    this.safe = false;
     this.tileLayer = null; // offscreen picture of the floor that is not cracking
     this.tileSig = '';
     this.bgLayer = null; // the background (gradient, rings, clouds, twinkles) repainted ~20 times a second, not 60+
@@ -1251,12 +1258,27 @@ export class Renderer {
     const dpr = window.devicePixelRatio || 1;
     // Capped at 1.5x: beyond that the picture is barely sharper but costs a lot
     // more to paint. `quality` lowers it further when a computer struggles.
-    this.px = clamp(this.cssScale * dpr * this.quality, 0.5, 1.5);
+    // `quality` is applied AFTER the 1.5x cap. (Before, a Retina Mac was always at the cap, so lowering the quality
+    // when the game was slow did nothing at all.)
+    this.px = Math.max(0.45, Math.min(this.cssScale * dpr, 1.5) * this.quality);
     this.canvas.width = Math.round(STAGE_W * this.px);
     this.canvas.height = Math.round(STAGE_H * this.px);
+    if (this.bgCanvas) {
+      this.bgCanvas.width = this.canvas.width;
+      this.bgCanvas.height = this.canvas.height;
+      this.bgCtx = null;
+    }
     this.tileSig = ''; // the cached floor must be repainted at the new size
     this.bgKey = ''; // ...and so must the cached background and track
     this.trackKey = '';
+  }
+
+  // Switch to the plain way of drawing (see this.safe). Called by main.js when drawing fails.
+  useSafeMode() {
+    this.safe = true;
+    if (this.bgCanvas) this.bgCanvas.style.display = 'none';
+    this.ctx = this.canvas.getContext('2d'); // same context; the background is now painted into it
+    this.resize();
   }
 
   setQuality(q) {
@@ -1353,6 +1375,7 @@ export class Renderer {
   idle(themeKey, dt) {
     this.clock += dt;
     this.ctx.setTransform(this.px, 0, 0, this.px, 0, 0);
+    if (this.bgCanvas && !this.safe) this.ctx.clearRect(0, 0, STAGE_W, STAGE_H);
     this.drawBackground(this.ctx, THEMES[themeKey] || THEMES.sunny);
   }
 
@@ -1364,6 +1387,7 @@ export class Renderer {
     ctx.setTransform(this.px, 0, 0, this.px, 0, 0);
     const theme = THEMES[frame.theme] || THEMES.sunny;
 
+    if (this.bgCanvas && !this.safe) ctx.clearRect(0, 0, STAGE_W, STAGE_H); // transparent, so the background canvas shows through
     this.drawBackground(ctx, theme);
 
     // screen shake
@@ -1411,6 +1435,21 @@ export class Renderer {
   // The background moves very slowly, so it is painted into an offscreen picture about 20 times a
   // second and just copied on every other frame. That saves a lot of painting (the big dashed rings).
   drawBackground(ctx, theme) {
+    if (this.safe) {
+      this.paintBackground(ctx, theme);
+      return;
+    }
+    if (this.bgCanvas) {
+      const k = `${theme.bg[0]}|${theme.bg[1]}|${theme.ring}|${theme.cloud}|${this.px}`;
+      if (k !== this.bgKey || this.clock < this.bgAt || this.clock - this.bgAt >= 1 / 20) {
+        if (!this.bgCtx) this.bgCtx = this.bgCanvas.getContext('2d', { alpha: false });
+        this.bgCtx.setTransform(this.px, 0, 0, this.px, 0, 0);
+        this.paintBackground(this.bgCtx, theme);
+        this.bgKey = k;
+        this.bgAt = this.clock;
+      }
+      return; // nothing to copy: the background canvas is already behind this one
+    }
     const key = `${theme.bg[0]}|${theme.bg[1]}|${theme.ring}|${theme.cloud}|${this.px}`;
     if (!this.bgLayer) this.bgLayer = document.createElement('canvas');
     const stale = key !== this.bgKey || this.clock < this.bgAt || this.clock - this.bgAt >= 1 / 20;
@@ -1500,6 +1539,10 @@ export class Renderer {
   // are cracking (and their neighbours, which overlap them) are painted live.
   drawTiles(ctx, frame, theme) {
     const { tiles, cols } = frame;
+    if (this.safe) {
+      this.paintTiles(ctx, tiles, cols, theme, () => true); // everything live, no cached picture
+      return;
+    }
     // Cache key: which tiles stand perfectly still / are holes (cracking tiles
     // all look like "_" here because they are drawn live).
     const sig = `${frame.theme}|${this.canvas.width}|${tiles.replace(/[1-9]/g, '_')}`;
@@ -1867,6 +1910,13 @@ export class Renderer {
   drawTrack(ctx, frame, tr) {
     const cx = OX + tr.cx;
     const cy = OY + tr.cy;
+    if (this.safe) {
+      this.paintTrackBase(ctx, tr);
+      ctx.save();
+      this.drawTrackLive(ctx, frame, tr, cx, cy);
+      ctx.restore();
+      return;
+    }
     // The track surface, its dashed centre line and the start strip never change during a round, so they are
     // painted once into an offscreen picture and copied each frame.
     const key = `${tr.cx},${tr.cy},${tr.a},${tr.b},${tr.start},${this.px}`;

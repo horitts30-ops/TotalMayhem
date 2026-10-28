@@ -134,7 +134,7 @@ test('packs: odds add to 100, better packs cost more and have better odds and gu
   }
   assert.ok(P.PACKS.at(-1).weights[4] > 0, 'the top pack can drop Legendary');
   assert.equal(P.PACKS[0].weights[4], 0, 'the cheapest pack cannot drop Legendary');
-  assert.ok(P.PACKS.every((p) => p.min > 0 || p.id === 'basic'));
+  assert.ok(P.PACKS.every((p) => p.min > 0 || p.id === 'basic' || p.id === 'classic'));
 });
 
 test('packs: duplicates can never make a profit - even a pack of pure duplicates pays back well under its price', async () => {

@@ -413,17 +413,21 @@ does not guess knockbacks, collisions with other players or jumps (those still w
 * **Skins and hats:** 13 new skins and 30 new hats (your five collections: Disaster, Magical Nonsense, Snack Attack, Show-Off and Weird Science).
   A few have tiny **idle animations** that are purely cosmetic: the Emergency chicken squawks "BAWK!" every few seconds, the UFO's little alien waves,
   the Tiny crown wobbles when you fall or are dizzy, the Spinning siren flashes, the Satellite dish turns, the Noodle nest steams, the Popcorn pops.
-* **Packs** (title screen or lobby, **Packs** button). Four packs, a bit like trading-card packs. Each card is one skin, hat or back item, or a whole **Outfit**
+* **Packs** (title screen or lobby, **Packs** button). Five packs, a bit like trading-card packs. Each card is one skin, hat or back item, or a whole **Outfit**
   (a matching skin + back item + hat). Cards are Common, Uncommon, Rare, Epic or Legendary.
 
   | Pack | Price | Cards | Guarantee |
   |---|---|---|---|
   | Basic | 120 | 3 | none (mostly Common) |
+  | Classic | 260 | 4 | none (Common 55%, Uncommon 25%, Rare 13%, Epic 6%, Legendary 1%) |
   | Super | 300 | 4 | at least 1 Uncommon |
   | Ultra | 700 | 5 | at least 1 Rare |
   | Legend | 1500 | 5 | at least 1 Epic (and a chance of Legendary) |
 
+  A **Rarity guide** under the packs says what each rarity means (Common = everyday silly hats ... Legendary = signature cosmetics with special animations) and the Classic Pack's odds.
   The exact odds of each pack are shown on the Packs screen. The best card is revealed last; click a card to flip it, or "Flip all".
+  **Outfit cards roll (v0.13.0):** when you flip an outfit, its picture, name and rarity colour flick through random outfits like a slot machine, slow down, and land on the one you got
+  (about 2 seconds, with little clicks). It is only a show: the result was decided the moment you paid, so nothing about the roll can change it. If your computer asks for reduced motion, the roll is skipped.
 * **Friendly rules:** packs use only in-game coins (there is **no real money anywhere**). A card you already own pays coins back (5 / 15 / 40 / 100 / 250 by rarity, outfits pay double) -
   never more than a small part of the price (a test checks this), so you cannot make coins by opening packs. A "lucky streak protection" counter guarantees an Epic or better
   card after 10 packs without one. Everything is cosmetic: nothing in a pack changes how a minigame plays.
@@ -431,6 +435,27 @@ does not guess knockbacks, collisions with other players or jumps (those still w
 * **A note on the old "no gambling" rule:** packs are random, so they bend it. The safeguards above (coins only, shown odds, guarantees, refunds, no pay-to-win) are why I think it
   fits the spirit of the rule, but if you would rather not have any randomness, the shop could sell pack items for fixed coin prices instead - tell me.
 * **Where it is saved:** in your browser with the rest of your wallet. As with the Shop, someone who edits their own saved data can only give THEMSELVES items.
+
+### Trading (v0.13.0, in the lobby)
+
+* **How:** in the lobby, every other player's card has a **🤝 Trade** button. They get a "wants to trade with you" bar (Yes / No thanks). If they say yes, a trade window opens
+  for both of you. Each of you puts in **coins** (0 to 99,999) and/or **items** (up to 6; "+ Add items" opens your tradable items). Both of you can see the other side live.
+  When you are both happy, **both press Accept**. Changing anything (coins or items) on either side cancels both Accepts, so nobody can swap the offer at the last second.
+  Then the trade happens: coins and items move, and both of you see "Trade done!". Press Cancel or Esc to stop at any time.
+* **Give or sell:** put coins on one side and nothing on the other to **give** coins (or an item); put coins on one side and an item on the other to **sell**.
+* **Rules:** lobby (and final scoreboard) only, never during a round; only players in the same room; one trade at a time per player; free starter items and trophy (achievement) items
+  cannot be traded, everything else can (shop items, pack items). You cannot receive an item you already own (the Accept button tells you who has to take it out).
+  A trade that was not answered for 3 minutes closes by itself, and so does a trade when someone leaves or loses connection.
+* **No real money.** Trading is only for coins and items inside the game. Please do not trade for real money or accounts anywhere.
+
+**IMPORTANT - the honest limits of trading (please read):**
+* Your coins and items live in **your own browser** (like the Shop), not on the server. So the server **cannot check** that someone really owns the coins or items they offer.
+  Each browser checks its own side before accepting, and honest players are always safe, but someone who edited their own saved data could offer something they do not have;
+  in that case the trade is simply refused when you press Accept (you will see the problem), and you lose nothing. What nobody can do is take something from you without your own Accept.
+* **A finished trade cannot be undone.** Only trade with people you trust, and check both sides before you press Accept.
+* If your connection drops exactly while a trade finishes, the server keeps the result and re-sends it when you come back, and every trade has an id so it can never be applied twice.
+  I tested this with fake clients, but **not** on a real, flaky internet connection.
+* The proper fix for all of this is **accounts with the wallet stored on the server**. That is a big change (logins, a database, hosting that keeps files) - tell me if you want it.
 
 ### Coins and the Shop (cosmetics only)
 
@@ -522,7 +547,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **347 automated tests** (about a minute and a half):
+runs **371 automated tests** (about a minute and a half):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -581,6 +606,13 @@ runs **347 automated tests** (about a minute and a half):
 * `tests/packs.test.js` (17 tests) - back items and catalogue sizes, your five hat collections, pack-only items (cannot be bought, all appear in a pack), outfits,
   odds and prices, the "duplicates never make a profit" check, guarantees over thousands of random packs, pity, duplicate refunds, wallet saving and hostile saved data,
   drawing every new cosmetic without errors, and the server keeping/clamping the back item.
+* `tests/slownet.test.js` (5 tests) - a player whose network blocks WebSockets (so they use slow HTTP polling) still receives the game pictures in a normal match and in Prop Hunt,
+  a normal WebSocket player still gets the full stream, and the browser is set up to really fall back to polling.
+* `tests/serve.test.js` (6 tests) - the web files are sent compressed (brotli / gzip) and unpack to exactly the original, much smaller; browsers without compression still work;
+  "not modified" answers; no way to read files outside `public/`; the page's "game could not start" safety net exists and every preloaded script exists.
+* `tests/trade.test.js` (13 tests) - the trade window over real sockets: ask / yes / offer / both accept / done, an accept on an old offer is refused, a failed commit cancels cleanly, same-room only,
+  no-thanks / cancel / disconnect, request rate limit, junk messages, a lost "done" message being re-sent and applied only once, trades only in the lobby, and the wallet rules (items move, coins are
+  conserved, you cannot give what you do not own, free and trophy items are not tradable).
 * `tests/social.test.js` (17 tests) - the Rage Bait room setting, emoji bubbles (valid, rate-limited, same-room only), the admin lock (wrong codes, lockouts, short or missing
   codes, no tokens leaked, kick/close/announce), and text chat (phases, filter, limits, history, admin switch).
 * `tests/network.test.js` (28 tests) - a real server with real WebSocket clients: rooms,
@@ -647,6 +679,8 @@ total-mayhem/
       paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
     snapcodec.js          makes game snapshots ~40% smaller on the wire (public/js/snapcodec.js undoes it)
     stamina.js            the shared jump/shove stamina numbers and helpers
+    static.js             serves the web files compressed (brotli/gzip) with safe caching headers
+    trade.js              the trade window between two players (invite, offers, accept, two-step finish)
     maps.js               the 11 floor shapes, spawn points and centres (add a map here)
     rage.js               Rage Bait mode physics (each game also has a RAGE table)
     admin.js              the admin panel's lock (code, lockouts)
@@ -686,6 +720,9 @@ total-mayhem/
     v011.test.js          new skins, new achievements, browser scripts parse
     optimize.test.js      smaller snapshots (lag/size optimizations)
     packs.test.js         back items, packs, odds, outfits, wallet, server back item
+    trade.test.js         trading: window protocol + wallet rules
+    serve.test.js         compressed web files, caching headers, start-up safety net
+    slownet.test.js       players on slow (polling) connections still get the game
     music.test.js         music tests
     network.test.js       multiplayer tests
 ```
@@ -871,6 +908,40 @@ ever want coins to follow players between devices, that is the step to take.
   the stamina bar is hidden. No page errors appeared.
 * Packs: the guarantee, pity, duplicate refunds (always far below the price) and outfit rules are covered by tests, including thousands of random packs.
 * Rage Bait: a test checks that jumping and shoving work with an empty bar and spend nothing.
+
+**Added in v0.13.0 (trading + outfit roll) and how it was checked:**
+* 13 new tests (all 360 pass). In real headless Chromium with TWO browser windows in one room: the Trade button appeared on the other player's card, the invite bar appeared for the other
+  player, both windows showed the live offers, both pressed Accept, and afterwards **both wallets were right**: coins before 500 + 100 = 600, after 300 + 300 = 600; the hat moved from one
+  player to the other and the skin the other way; both wallets recorded the same trade id; no page errors. I also opened Legend packs in the browser until an outfit appeared and watched the
+  roll start (flicking through names), then land on the real card; "Flip all" with a rolling outfit still ended with the summary and "Open another".
+* That browser run found a real bug I then fixed: if you typed a coin amount and clicked an item right away, the amount was lost. It now sends what is in the box.
+* I looked at the roll as screenshots (mid-roll and landed), **not** as smooth motion, so I have not judged how it feels or whether 2 seconds is too slow or too fast
+  (the speed is `ROLL_STEPS` and the `55 * 1.19^step` delay in `rollOutfit()` in `public/js/main.js`).
+
+**Not verified in v0.13.0:** trading over the real internet between two real people; two people pressing Accept at the same instant on a slow connection; what happens when the browser
+is closed during a trade (it is covered by the server's re-send, but only tested with fake clients). Trading with more than one partner at once is not possible by design.
+
+**v0.13.2 - "I only see clouds, no map", lag, Home button:**
+* **Only the background, no map (friend's Chrome).** That picture is what the game draws when NO game data arrives. I found two real weaknesses and fixed both: (1) if a network blocked WebSockets
+  the game could not connect at all (the fallback to slow polling was switched off) - it now falls back; (2) for a player on that slow connection the server threw almost every picture away, so they would
+  see only the background - they now get pictures whenever their connection can take them (tested). I **could not reproduce your friend's exact problem**, so I cannot promise this was it. If it happens again
+  the game now tells the player on screen: "Waiting for game data... connection type: ..." (or "Drawing problem: ..." with the error), and drawing switches itself to a plainer "safe" way if the normal way fails.
+  The F3 panel shows the connection type. Please ask your friend what that yellow message says.
+* **Lag:** (1) The automatic "lower the picture quality when the game is slow" **did nothing on Retina Macs** (a size limit overrode it); it works now - in my slow-computer test the frame rate went from about 12 to 22.
+  (2) The background is its own picture behind the game, repainted 20 times a second, instead of being copied into the game picture 60 times a second. (3) Moving hazards (the Jump Rope, a gliding hill, a flying crown) are now drawn at the same moment as the other
+  players; before, the players were shown about 60 ms in the past but the rope was not, so you could look hit before the rope reached you. I profiled all 13 minigames in a real browser: the game's own code is tiny (under 3% of the time); what costs time is the browser painting big pictures.
+  I measured on a simulated slow computer, **not on a real Mac**, so I do not know how much you will feel it. If it is still laggy, press F3 and tell me FPS and ping.
+* **Home button:** a "Home" button is shown in the lobby and during matches (click twice during a match so nobody leaves by accident). It leaves the room and goes back to the home page.
+
+**v0.13.1 - speed-ups and the "will not load" safety net:**
+* **Smaller downloads:** the game's files are now sent compressed. In a real browser the page and all its scripts went from about 410 KB to about 104 KB, and the game was running 0.24 s after
+  the page arrived (on my own machine - on real Wi-Fi it is mostly download time, which is exactly what got smaller). The scripts are also fetched in parallel (preload hints) instead of one after another.
+* **No stale copies:** files are sent with "ask me if it changed" caching, so a friend can not get stuck with half old / half new files after you update the game.
+* **If the game cannot start** (a blocked script, an ad blocker, a very old browser, a broken cache) it no longer leaves a blank page: after a moment it shows a box that says what went wrong,
+  what to try (hard reload with Cmd+Shift+R, turn off extensions or try Incognito, update Chrome) and a short block of technical text. **I could not reproduce your friend's problem** (I have no Mac or their Chrome),
+  so I do not know the cause. I checked the code against old Chrome versions (nothing needs a new Chrome), that blocked storage cannot break it, and that a blocked script now shows this box
+  (tested by blocking the scripts in a real browser). Ask your friend to read you what the box says (or send a photo) and I can fix the real cause.
+* **Classic Pack + Rarity guide** (see Packs above).
 
 **v0.12.3 - lag optimizations (what changed and what I measured):**
 * **Smaller updates:** every 1/30 s the server sends each player a picture of the game. Players' field names are now sent once instead of once per player: about **40% smaller**

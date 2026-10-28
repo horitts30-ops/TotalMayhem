@@ -10,7 +10,7 @@
 // referee; the browser only sends controls and draws what it is told.
 // ---------------------------------------------------------------------------
 
-import { socket, request, saveSession, loadSession, clearSession } from './net.js';
+import { socket, request, saveSession, loadSession, clearSession, transportName } from './net.js';
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { Predictor, walkableFor } from './predict.js';
@@ -21,9 +21,10 @@ import { STAGE_W, STAGE_H, OX, OY, COLORS, HATS, SKINS, BACKS, THEMES, EMOTES } 
 import {
   KINDS, KIND_LABEL, loadWallet, saveWallet, owns, credit, buy, nextOwned, sanitizeLook,
   catalogue, nameOf as itemName, priceOf, isUnlockOnly, isPackOnly,
+  isTradable, checkTrade, applyTrade, TRADE_MAX_ITEMS, TRADE_MAX_COINS,
 } from './shop.js';
 import {
-  PACKS, OUTFITS, RARITY_LABEL, RARITY_COLOR, PITY_LIMIT, DUPE_COINS, oddsOf, openPack, outfitProgress, wearOutfit, rarityOfItem,
+  PACKS, OUTFITS, RARITY_BLURB, getPack, RARITY_LABEL, RARITY_COLOR, PITY_LIMIT, DUPE_COINS, oddsOf, openPack, outfitProgress, wearOutfit, rarityOfItem,
 } from './packs.js';
 import {
   ACHIEVEMENTS, loadTrophies, saveTrophies, emptyTrophies, recordRound, recordFinal, recordPowerRound, recordCoins,
@@ -53,6 +54,9 @@ const S = {
   hudSig: '',
   rejoining: false,
   booted: false,
+  drawFails: 0, // frames in a row that failed to draw (see onDrawError)
+  drawErr: '',
+  waitSince: 0, // since when no game data has arrived while playing (see watchGameData)
   interp: 90, // current interpolation delay in ms (adapts)
   chat: [], // text chat messages of this room (newest last)
   chatUnread: 0,
@@ -124,7 +128,10 @@ saveTrophiesNow();
 
 S.look = loadLook();
 
-const renderer = new Renderer($('game-canvas'));
+const renderer = new Renderer($('game-canvas'), $('bg-canvas'));
+// If the browser throws away the canvas (memory pressure, graphics card reset), repaint everything when it is back.
+$('game-canvas').addEventListener('contextlost', (e) => e.preventDefault());
+$('game-canvas').addEventListener('contextrestored', () => renderer.resize());
 
 const predictor = new Predictor();
 // Handy for testing: add ?nopredict to the address to switch the movement guessing off (and compare
@@ -197,6 +204,8 @@ function showView(v) {
   $('screen-lobby').classList.toggle('hidden', v !== 'lobby');
   $('stage-wrap').classList.toggle('hidden', v !== 'stage');
   document.body.classList.toggle('in-arena', v === 'stage');
+  $('btn-home').classList.toggle('hidden', v === 'title'); // in a room (lobby or match) there is always a way home
+  resetHomeButton();
   if (v === 'stage') fitStage();
   syncRoomExtras();
 }
@@ -451,6 +460,7 @@ function enterRoom(res) {
 }
 
 function leaveToTitle(message) {
+  closeTradeWindow();
   clearSession();
   S.me = null;
   S.room = null;
@@ -467,6 +477,28 @@ function leaveToTitle(message) {
   $('overlay-final').classList.add('hidden');
   showView('title');
   titleError(message || '');
+}
+
+// The Home button (in the lobby and during a match). Two clicks, so nobody leaves a match by accident.
+let homeTimer = 0;
+function resetHomeButton() {
+  clearTimeout(homeTimer);
+  const b = $('btn-home');
+  b.textContent = '\u{1F3E0} Home';
+  b.classList.remove('sure');
+}
+function onHomeClick() {
+  const b = $('btn-home');
+  b.blur(); // so the space bar (jump) can never press it
+  if (S.view === 'lobby' || b.classList.contains('sure')) {
+    resetHomeButton();
+    leaveRoom();
+    return;
+  }
+  b.textContent = 'Leave the match? Click again';
+  b.classList.add('sure');
+  clearTimeout(homeTimer);
+  homeTimer = setTimeout(resetHomeButton, 3000);
 }
 
 async function leaveRoom() {
@@ -495,6 +527,12 @@ function renderLobby(st) {
     card.appendChild(
       el('div', 'pstatus', !p.connected ? 'reconnecting…' : p.id === st.hostId ? 'Host' : p.ready ? 'Ready!' : 'Not ready')
     );
+    if (p.id !== S.me && p.connected) {
+      const tb = el('button', 'trade-btn', '\u{1F91D} Trade');
+      tb.type = 'button';
+      tb.addEventListener('click', () => startTrade(p.id));
+      card.appendChild(tb);
+    }
     grid.appendChild(card);
   }
 
@@ -1125,6 +1163,21 @@ function renderPacks() {
     list.appendChild(card);
   });
 
+  // what each rarity means (and how often it comes out of a Classic Pack)
+  const guide = $('rarity-guide');
+  guide.textContent = '';
+  guide.appendChild(el('div', 'rg-title', 'Rarity guide'));
+  const classic = oddsOf(getPack('classic'));
+  RARITY_LABEL.forEach((name, r) => {
+    const row = el('div', 'rg-row');
+    row.style.setProperty('--rar', RARITY_COLOR[r]);
+    row.appendChild(el('span', 'rg-name', name));
+    row.appendChild(el('span', 'rg-pct', `${pct(classic[r])}%`));
+    row.appendChild(el('span', 'rg-desc', RARITY_BLURB[r]));
+    guide.appendChild(row);
+  });
+  guide.appendChild(el('div', 'rg-note', 'Percentages are the chance for ONE card in a Classic Pack. Every pack shows its own odds above.'));
+
   const left = Math.max(0, PITY_LIMIT - (S.wallet.pity || 0));
   $('pack-pity').textContent = (S.wallet.pity || 0) >= PITY_LIMIT
     ? 'Lucky streak protection: your next pack is guaranteed to have an Epic or better card!'
@@ -1187,7 +1240,7 @@ function startReveal(packId) {
   saveWalletNow();
   afterUnlocks(recordOwned(S.trophies, S.wallet));
   PK.lastPack = packId;
-  PK.reveal = { res, flipped: res.cards.map(() => false) };
+  PK.reveal = { res, flipped: res.cards.map(() => false), rolling: 0 };
   $('overlay-reveal').classList.remove('hidden');
   $('reveal-title').textContent = res.pack.name;
   $('reveal-hint').textContent = 'Click a card to flip it! The best one is last.';
@@ -1203,16 +1256,20 @@ function startReveal(packId) {
     const inner = el('div', 'rv-inner');
     const back = el('div', 'rv-face rv-back', '?');
     const front = el('div', 'rv-face rv-front');
-    front.appendChild(el('div', 'rv-rarity', RARITY_LABEL[c.rarity]));
+    const rarEl = el('div', 'rv-rarity', RARITY_LABEL[c.rarity]);
+    front.appendChild(rarEl);
     const cv = el('canvas');
     cv.width = 96;
     cv.height = 120;
     front.appendChild(cv);
     front.appendChild(el('div', 'rv-kind', cardKindLabel(c)));
-    front.appendChild(el('div', 'rv-name', cardTitle(c)));
-    front.appendChild(el('div', 'rv-new' + (c.isNew ? '' : ' dupe'), c.isNew
+    const nameEl = el('div', 'rv-name', cardTitle(c));
+    front.appendChild(nameEl);
+    const newEl = el('div', 'rv-new' + (c.isNew ? '' : ' dupe'), c.isNew
       ? (c.type === 'outfit' && c.newPieces.length < 3 ? `NEW! ${c.newPieces.length} new piece${c.newPieces.length === 1 ? '' : 's'}` : 'NEW!')
-      : `Duplicate +${c.refund} coins`));
+      : `Duplicate +${c.refund} coins`);
+    front.appendChild(newEl);
+    card._parts = { rarEl, nameEl, newEl };
     inner.appendChild(back);
     inner.appendChild(front);
     card.appendChild(inner);
@@ -1223,18 +1280,74 @@ function startReveal(packId) {
   sfx.click();
 }
 
+// Outfit cards "roll" like a slot machine: the card flips over, then the picture, name and rarity colour flick
+// through random outfits, slow down, and land on the one you really got. The result was decided before the roll
+// starts (openPack already ran), so this is only a show - skipping or closing it never changes what you won.
+const ROLL_STEPS = 13;
+function rollOutfit(R, card, c, done) {
+  const { rarEl, nameEl, newEl } = card._parts;
+  const cv = card.querySelector('canvas');
+  card.classList.add('rolling');
+  newEl.style.visibility = 'hidden';
+  let step = 0;
+  const quiet = R.rolling > 1; // lots of cards rolling at once (Flip all): only the clicks of one are worth hearing
+  const tick = () => {
+    if (PK.reveal !== R) return; // the window was closed
+    if (step >= ROLL_STEPS) {
+      rarEl.textContent = RARITY_LABEL[c.rarity];
+      card.style.setProperty('--rar', RARITY_COLOR[c.rarity]);
+      nameEl.textContent = cardTitle(c);
+      card._draw();
+      newEl.style.visibility = '';
+      card.classList.remove('rolling');
+      card.classList.add('landed');
+      done();
+      return;
+    }
+    let o;
+    do o = OUTFITS[Math.floor(Math.random() * OUTFITS.length)]; while (o === c.outfit && OUTFITS.length > 1);
+    drawPreview(cv, { ...S.look, skin: o.skin, back: o.back, hat: o.hat }, step * 0.1);
+    nameEl.textContent = o.name;
+    rarEl.textContent = RARITY_LABEL[o.rarity];
+    card.style.setProperty('--rar', RARITY_COLOR[o.rarity]);
+    if (!quiet || card === R.firstRoller) sfx.click();
+    step++;
+    setTimeout(tick, 55 * Math.pow(1.19, step));
+  };
+  tick();
+}
+
 function flipCard(i, card, cv, c) {
   const R = PK.reveal;
   if (!R || R.flipped[i]) return;
   R.flipped[i] = true;
   card.classList.add('flipped');
+  const land = () => {
+    if (c.rarity >= 3) {
+      card.classList.add('shine');
+      sfx.jackpot();
+    } else if (c.isNew) sfx.coin(0.8);
+    else sfx.click();
+  };
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (c.type === 'outfit' && !reduced) {
+    R.rolling++;
+    if (!R.firstRoller) R.firstRoller = card;
+    // draw something right away so the card is not blank while it turns over
+    card._draw();
+    setTimeout(() => {
+      if (PK.reveal !== R) return;
+      rollOutfit(R, card, c, () => {
+        R.rolling--;
+        land();
+        if (R.flipped.every(Boolean) && R.rolling === 0) finishReveal();
+      });
+    }, 350); // let the flip finish first
+    return;
+  }
   card._draw();
-  if (c.rarity >= 3) {
-    card.classList.add('shine');
-    sfx.jackpot();
-  } else if (c.isNew) sfx.coin(0.8);
-  else sfx.click();
-  if (R.flipped.every(Boolean)) finishReveal();
+  land();
+  if (R.flipped.every(Boolean) && R.rolling === 0) finishReveal();
 }
 
 function finishReveal() {
@@ -1272,6 +1385,247 @@ function flipAll() {
   if (!R) return;
   Array.from(cards).forEach((card, i) => flipCard(i, card, null, R.res.cards[i]));
 }
+
+
+// =============================================================== trading
+// The server (server/trade.js) runs the trade window; this is the screen for it. Your coins and items are in
+// YOUR browser, so when a trade is finished each browser moves its own side (shop.js applyTrade).
+const TR = { view: null, open: false, tab: 'hat', picking: false, offerTimer: 0 };
+
+function openTradeWindow() {
+  if (!TR.open) {
+    // only one big window at a time
+    if (SHOP.open) closeShop();
+    if (PK.open) closePacks();
+    if (TRO.open) closeTrophies();
+    TR.open = true;
+    TR.picking = false;
+    document.body.classList.add('modal-open');
+    $('overlay-trade').classList.remove('hidden');
+  }
+}
+
+function closeTradeWindow() {
+  TR.open = false;
+  TR.view = null;
+  TR.picking = false;
+  clearTimeout(TR.offerTimer);
+  document.body.classList.remove('modal-open');
+  $('overlay-trade').classList.add('hidden');
+  $('trade-invite').classList.add('hidden');
+}
+
+async function startTrade(pid) {
+  const res = await request('trade:request', { to: pid });
+  if (!res.ok) toast(res.error || 'Could not start a trade.');
+  else sfx.click();
+}
+
+function tradeSides() {
+  const v = TR.view;
+  return {
+    give: { coins: v.mine.coins, items: v.mine.items },
+    get: { coins: v.theirs.coins, items: v.theirs.items },
+  };
+}
+
+function sendOffer(coins, items) {
+  if (!TR.view) return;
+  clearTimeout(TR.offerTimer); // this offer already carries the coins, so the delayed "coins changed" one is not needed
+  socket.emit('trade:offer', { id: TR.view.id, coins, items });
+}
+
+// The coins number as typed right now. (Someone can type 200 and straight away click an item; the server has not
+// heard about the 200 yet, so adding an item must send what is in the box, not the older number.)
+function typedCoins() {
+  const raw = Math.floor(Number($('trade-my-coins').value));
+  if (!Number.isFinite(raw)) return TR.view ? TR.view.mine.coins : 0;
+  return Math.max(0, Math.min(TRADE_MAX_COINS, raw));
+}
+
+function tradeChip(item, removable) {
+  const chip = el('div', 'trade-chip');
+  const rar = rarityOfItem(item.kind, item.index);
+  if (rar >= 0) chip.style.setProperty('--rar', RARITY_COLOR[rar]);
+  const cv = el('canvas');
+  cv.width = 48;
+  cv.height = 60;
+  chip.appendChild(cv);
+  if (item.kind === 'color') {
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = COLORS[item.index].hex;
+    ctx.beginPath();
+    ctx.arc(24, 30, 18, 0, Math.PI * 2);
+    ctx.fill();
+  } else drawPreview(cv, { ...S.look, [item.kind]: item.index }, 0);
+  chip.appendChild(el('div', 'nm', itemName(item.kind, item.index)));
+  if (removable) {
+    const x = el('button', 'x', '✕');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Remove');
+    x.addEventListener('click', () => {
+      const v = TR.view;
+      sendOffer(typedCoins(), v.mine.items.filter((i) => !(i.kind === item.kind && i.index === item.index)));
+    });
+    chip.appendChild(x);
+  }
+  return chip;
+}
+
+function renderTrade() {
+  const v = TR.view;
+  if (!v || !TR.open) return;
+  $('trade-coins').textContent = String(S.wallet.coins);
+  $('trade-title').textContent = `Trade with ${v.with.name}`;
+  $('trade-their-title').textContent = `${v.with.name} gives`;
+  const open = v.state === 'open';
+  const status = $('trade-status');
+  if (v.state === 'invite') status.textContent = `Waiting for ${v.with.name} to say yes...`;
+  else if (v.state === 'confirming') status.textContent = 'Both accepted! Checking that everything is in place...';
+  else status.textContent = 'Put coins or items in. When you are both happy, both press Accept. Changing anything cancels both Accepts.';
+
+  // my side
+  const coinInput = $('trade-my-coins');
+  if (document.activeElement !== coinInput) coinInput.value = String(v.mine.coins);
+  coinInput.disabled = !open;
+  const mine = $('trade-my-items');
+  mine.textContent = '';
+  for (const it of v.mine.items) mine.appendChild(tradeChip(it, open));
+  if (!v.mine.items.length) mine.appendChild(el('div', 'trade-empty', 'No items yet'));
+  $('trade-add').disabled = !open || v.mine.items.length >= TRADE_MAX_ITEMS;
+  $('trade-my-state').textContent = v.mine.accepted ? '✅ You accepted' : '';
+
+  // their side
+  $('trade-their-coins').textContent = `Coins: ${v.theirs.coins}`;
+  const theirs = $('trade-their-items');
+  theirs.textContent = '';
+  for (const it of v.theirs.items) {
+    const chip = tradeChip(it, false);
+    if (owns(S.wallet, it.kind, it.index)) chip.classList.add('dupe');
+    theirs.appendChild(chip);
+  }
+  if (!v.theirs.items.length) theirs.appendChild(el('div', 'trade-empty', 'No items yet'));
+  $('trade-their-state').textContent = v.theirs.accepted ? `✅ ${v.with.name} accepted` : '';
+
+  // can I accept?
+  const { give, get } = tradeSides();
+  const empty = give.coins === 0 && get.coins === 0 && !give.items.length && !get.items.length;
+  const err = checkTrade(S.wallet, give, get);
+  const note = $('trade-note');
+  note.textContent = open && err ? err + (err.startsWith('You already own') ? ' Ask them to take it out.' : '') : '';
+  const accept = $('trade-accept');
+  accept.disabled = !open || empty || !!err || v.mine.accepted;
+  accept.textContent = v.mine.accepted ? 'Waiting for them...' : empty ? 'Put something in first' : 'Accept trade';
+
+  renderTradePicker();
+}
+
+function renderTradePicker() {
+  const v = TR.view;
+  const box = $('trade-picker');
+  box.classList.toggle('hidden', !(TR.picking && v && v.state === 'open'));
+  if (box.classList.contains('hidden')) return;
+  const tabs = $('trade-tabs');
+  tabs.textContent = '';
+  const chosen = new Set(v.mine.items.map((i) => `${i.kind}:${i.index}`));
+  for (const k of KINDS) {
+    const list = catalogue(k).filter((it) => owns(S.wallet, k, it.index) && isTradable(k, it.index));
+    const b = el('button', 'shop-tab' + (k === TR.tab ? ' on' : ''), KIND_LABEL[k]);
+    b.type = 'button';
+    b.appendChild(el('small', null, String(list.length)));
+    b.addEventListener('click', () => {
+      TR.tab = k;
+      renderTradePicker();
+    });
+    tabs.appendChild(b);
+  }
+  const grid = $('trade-grid');
+  grid.textContent = '';
+  const mineList = catalogue(TR.tab).filter((it) => owns(S.wallet, TR.tab, it.index) && isTradable(TR.tab, it.index));
+  if (!mineList.length) grid.appendChild(el('div', 'trade-empty', 'Nothing here can be traded. (Free starter items and trophy items cannot be traded.)'));
+  for (const it of mineList) {
+    const card = el('button', 'shop-card rar');
+    card.type = 'button';
+    const rar = rarityOfItem(it.kind, it.index);
+    if (rar >= 0) card.style.setProperty('--rar', RARITY_COLOR[rar]);
+    if (chosen.has(`${it.kind}:${it.index}`)) card.classList.add('sel');
+    if (S.look[it.kind] === it.index) card.appendChild(el('div', 'worn-tag', 'wearing'));
+    if (it.kind === 'color') {
+      const dot = el('div', 'dot');
+      dot.style.background = COLORS[it.index].hex;
+      card.appendChild(dot);
+    } else {
+      const cv = el('canvas');
+      cv.width = 64;
+      cv.height = 80;
+      card.appendChild(cv);
+      drawPreview(cv, { ...S.look, [it.kind]: it.index }, 0);
+    }
+    card.appendChild(el('div', 'nm', it.name));
+    card.addEventListener('click', () => {
+      const cur = TR.view.mine.items;
+      const has = cur.some((i) => i.kind === it.kind && i.index === it.index);
+      if (!has && cur.length >= TRADE_MAX_ITEMS) return;
+      const next = has ? cur.filter((i) => !(i.kind === it.kind && i.index === it.index)) : [...cur, { kind: it.kind, index: it.index }];
+      sendOffer(typedCoins(), next);
+    });
+    grid.appendChild(card);
+  }
+}
+
+socket.on('trade:state', (view) => {
+  if (!S.room) return;
+  TR.view = view;
+  if (view.state === 'invite' && !view.initiator) {
+    $('trade-invite-text').textContent = `${view.with.name} wants to trade with you.`;
+    $('trade-invite').classList.remove('hidden');
+    sfx.coin(0.6);
+    return;
+  }
+  $('trade-invite').classList.add('hidden');
+  openTradeWindow();
+  renderTrade();
+});
+
+socket.on('trade:closed', (info) => {
+  const wasOpen = TR.open || !$('trade-invite').classList.contains('hidden');
+  closeTradeWindow();
+  if (wasOpen && info && info.reason) toast(info.reason);
+});
+
+// Both people pressed Accept: double-check that I can really do it, and say so.
+socket.on('trade:confirm', ({ id, rev }) => {
+  const v = TR.view;
+  let ok = false;
+  if (v && v.id === id && v.rev === rev) {
+    const { give, get } = tradeSides();
+    ok = !checkTrade(S.wallet, give, get);
+  }
+  socket.emit('trade:commit', { id, rev, ok });
+});
+
+// The trade is final: move my coins and items.
+socket.on('trade:done', (p) => {
+  const res = applyTrade(S.wallet, p.id, p.give, p.get);
+  socket.emit('trade:ack', { id: p.id });
+  if (!res.ok) {
+    closeTradeWindow();
+    toast(`The trade could not be finished: ${res.error}`);
+    return;
+  }
+  if (res.repeat) return;
+  saveWalletNow();
+  S.look = { ...S.look, ...sanitizeLook(S.wallet, S.look) }; // took off anything you just traded away
+  lookChanged();
+  refreshPickers();
+  closeTradeWindow();
+  sfx.jackpot();
+  const bits = [];
+  if (p.get.coins) bits.push(`${p.get.coins} coins`);
+  for (const it of p.get.items) bits.push(itemName(it.kind, it.index));
+  toast(bits.length ? `Trade done! You got ${bits.join(', ')}.` : 'Trade done!');
+  afterUnlocks(recordOwned(S.trophies, S.wallet));
+});
 
 // =============================================================== room state
 function applyRoomState(st) {
@@ -2025,7 +2379,8 @@ function trackFrameRate(now, frameMs) {
       `FPS ${p.fps}   worst frame ${Math.round(p.worst)} ms\n` +
       `ping ${n.ping == null ? '?' : n.ping} ms   snaps/s ${n.snapCount}\n` +
       `render delay ${Math.round(S.interp)} ms   jitter ${n.jitter.toFixed(1)} ms\n` +
-      `resolution x${renderer.px.toFixed(2)}  (quality ${renderer.quality.toFixed(2)})`;
+      `resolution x${renderer.px.toFixed(2)}  (quality ${renderer.quality.toFixed(2)})\n` +
+      `connection ${transportName()}${renderer.safe ? '   safe drawing ON' : ''}`;
   }
   S.net.snapCount = 0;
   p.frames = 0;
@@ -2076,6 +2431,23 @@ function sampleFrame(now) {
     };
   });
 
+  // Moving hazards (the Jump Rope, a gliding hill, a flying crown) are shown at the SAME moment as the other
+  // players, not at the newest snapshot. Before, the players were drawn ~60 ms in the past but the rope at "now",
+  // so a player could look hit before the rope reached them (or look safe when they were not).
+  let world = latest.s;
+  if (a !== b && a.s !== b.s) {
+    const dtSec = Math.max(0, Math.min(renderT - a.r, b.r - a.r)) / 1000;
+    const A = a.s;
+    const B = b.s;
+    if (A.rp && B.rp) world = { ...world, rp: { ...B.rp, a: A.rp.a + A.rp.w * dtSec } };
+    if (A.crown && B.crown && A.crown.mv && B.crown.mv && !A.crown.hd && !B.crown.hd) {
+      world = { ...world, crown: { ...B.crown, x: A.crown.x + (B.crown.x - A.crown.x) * k, y: A.crown.y + (B.crown.y - A.crown.y) * k } };
+    }
+    if (A.zone && B.zone && A.zone.mv && B.zone.mv) {
+      world = { ...world, zone: { ...B.zone, x: A.zone.x + (B.zone.x - A.zone.x) * k, y: A.zone.y + (B.zone.y - A.zone.y) * k } };
+    }
+  }
+
   const arena = S.room && S.room.arena;
   return {
     theme: S.theme,
@@ -2091,7 +2463,7 @@ function sampleFrame(now) {
     rows: arena ? arena.rows : 9,
     finished: latest.s.fin,
     aliveCount: latest.s.alive,
-    latest: latest.s,
+    latest: world,
   };
 }
 
@@ -2242,6 +2614,56 @@ function updateTimersText(now) {
   }
 }
 
+// ---- when something goes wrong on ONE person's computer, say so on screen instead of showing an empty map
+function showPlayWarn(text) {
+  const box = $('play-warn');
+  if (!text) {
+    box.classList.add('hidden');
+    return;
+  }
+  if (box.textContent !== text) box.textContent = text;
+  box.classList.remove('hidden');
+}
+
+// Drawing threw an error. First retry in "safe drawing" (no offscreen pictures); if that fails too, show the error.
+function onDrawError(e) {
+  S.drawFails = (S.drawFails || 0) + 1;
+  if (!S.drawErr) {
+    S.drawErr = String((e && e.message) || e).slice(0, 160);
+    console.error('draw failed:', e);
+  }
+  if (!renderer.safe && S.drawFails >= 3) {
+    renderer.useSafeMode(); // also resets the canvas state that the failed frame left half-finished
+    S.drawFails = 0;
+    return;
+  }
+  if (S.drawFails >= 3) {
+    showPlayWarn(`Drawing problem on this computer: ${S.drawErr}. Try reloading (Cmd/Ctrl + Shift + R), a different browser, or turning off extensions.`);
+  }
+}
+
+// Playing, but no game data is arriving (a blocked or very slow connection): explain it instead of an empty arena.
+function watchGameData(now) {
+  const st = S.room;
+  const playing = st && st.phase === 'playing';
+  const last = S.snaps.length ? S.snaps[S.snaps.length - 1].r : 0;
+  const starved = playing && (!last || now - last > 1500);
+  if (!starved) {
+    S.waitSince = 0;
+    if (S.drawFails < 3) showPlayWarn('');
+    return;
+  }
+  if (!S.waitSince) S.waitSince = now;
+  if (now - S.waitSince > 2500) {
+    const t = transportName();
+    showPlayWarn(
+      t === 'none'
+        ? 'Connection lost - reconnecting... (if this stays, check your internet or turn off a VPN)'
+        : `Waiting for game data... connection type: ${t}. If this stays, a VPN, school/work network, firewall, antivirus or ad blocker may be blocking the game. Try turning it off, another network, or another browser.`
+    );
+  }
+}
+
 function loop(now) {
   const frameMs = now - S.lastFrame;
   const dt = Math.min(0.05, frameMs / 1000);
@@ -2253,11 +2675,23 @@ function loop(now) {
     syncStageBg((frame && frame.theme) || S.theme);
     if (frame) {
       if (DEBUG) window.__tmFrame = frame;
-      renderer.draw(frame, dt);
+      try {
+        renderer.draw(frame, dt);
+        S.drawFails = 0;
+      } catch (e) {
+        onDrawError(e);
+      }
       if (S.room && (S.room.phase === 'playing' || S.room.phase === 'results')) updateHud(frame);
     } else {
-      renderer.idle(S.theme, dt);
+      try {
+        renderer.idle(S.theme, dt);
+      } catch (e) {
+        onDrawError(e);
+      }
     }
+    watchGameData(now);
+  } else {
+    S.waitSince = 0;
   }
   animateAvatars(now / 1000);
   updateTimersText(now);
@@ -2307,6 +2741,40 @@ function bindUi() {
   $('overlay-shop').addEventListener('pointerdown', (e) => {
     if (e.target === $('overlay-shop')) closeShop();
   });
+  $('trade-invite-yes').addEventListener('click', async () => {
+    if (!TR.view) return;
+    const res = await request('trade:answer', { id: TR.view.id, yes: true });
+    if (!res.ok) toast(res.error || 'That trade is over.');
+  });
+  $('trade-invite-no').addEventListener('click', async () => {
+    const id = TR.view && TR.view.id;
+    $('trade-invite').classList.add('hidden');
+    if (id) await request('trade:answer', { id, yes: false });
+    TR.view = null;
+  });
+  $('trade-cancel').addEventListener('click', () => {
+    if (TR.view) socket.emit('trade:cancel', { id: TR.view.id });
+    closeTradeWindow();
+  });
+  $('trade-accept').addEventListener('click', async () => {
+    if (!TR.view) return;
+    const res = await request('trade:accept', { id: TR.view.id, rev: TR.view.rev });
+    if (!res.ok) toast(res.error);
+  });
+  $('trade-add').addEventListener('click', () => {
+    TR.picking = !TR.picking;
+    renderTradePicker();
+  });
+  $('trade-my-coins').addEventListener('input', (e) => {
+    clearTimeout(TR.offerTimer);
+    TR.offerTimer = setTimeout(() => {
+      if (!TR.view || TR.view.state !== 'open') return;
+      const raw = Math.floor(Number(e.target.value));
+      const n = Number.isFinite(raw) ? Math.max(0, Math.min(TRADE_MAX_COINS, raw)) : 0;
+      e.target.value = String(n);
+      if (n !== TR.view.mine.coins) sendOffer(n, TR.view.mine.items);
+    }, 350);
+  });
   $('packs-close').addEventListener('click', closePacks);
   $('overlay-packs').addEventListener('pointerdown', (e) => {
     if (e.target === $('overlay-packs')) closePacks();
@@ -2320,7 +2788,10 @@ function bindUi() {
   });
   addAvatar($('shop-canvas'), () => shopLook());
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && PK.reveal) closeReveal();
+    if (e.key === 'Escape' && TR.open) {
+      if (TR.view) socket.emit('trade:cancel', { id: TR.view.id });
+      closeTradeWindow();
+    } else if (e.key === 'Escape' && PK.reveal) closeReveal();
     else if (e.key === 'Escape' && PK.open) closePacks();
     if (e.key === 'Escape' && SHOP.open) closeShop();
     if (e.key === 'Escape' && TRO.open) closeTrophies();
@@ -2332,6 +2803,7 @@ function bindUi() {
   });
 
   $('btn-leave').addEventListener('click', leaveRoom);
+  $('btn-home').addEventListener('click', onHomeClick);
   $('btn-leave2').addEventListener('click', leaveRoom);
   $('btn-copy').addEventListener('click', async () => {
     const link = `${location.origin}/?room=${S.room ? S.room.code : ''}`;
@@ -2451,6 +2923,8 @@ async function tryRejoin() {
   S.rejoining = false;
   if (!res.ok) {
     leaveToTitle(S.room ? 'That room has ended.' : '');
+  } else {
+    socket.emit('trade:pending'); // a trade may have finished while we were offline
   }
 }
 
@@ -2473,7 +2947,10 @@ async function boot() {
   showView('title');
   requestAnimationFrame(loop);
   S.booted = true;
+  window.__tmBooted = true; // tells the "game could not start" watchdog in index.html that all is well
   if (loadSession()) await tryRejoin();
 }
 
-boot();
+boot().catch((e) => {
+  if (window.__tmBootFail) window.__tmBootFail('The game hit a problem while starting: ' + (e && e.message));
+});

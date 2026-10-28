@@ -62,7 +62,7 @@ export function catalogue(kind) {
 export function emptyWallet() {
   const owned = {};
   for (const k of KINDS) owned[k] = [];
-  const w = { coins: 0, owned, paid: [], pity: 0, packs: 0 };
+  const w = { coins: 0, owned, paid: [], pity: 0, packs: 0, trades: [] };
   return normalizeWallet(w);
 }
 
@@ -83,7 +83,10 @@ export function normalizeWallet(raw) {
   // pity = packs opened since the last Epic-or-better card; packs = packs opened in total (packs.js)
   const pity = Number.isFinite(w.pity) ? Math.max(0, Math.min(999, Math.floor(w.pity))) : 0;
   const packs = Number.isFinite(w.packs) ? Math.max(0, Math.min(1e6, Math.floor(w.packs))) : 0;
-  return { coins, owned, paid, pity, packs };
+  // ids of finished trades, so the same trade can never be applied twice (trades.js on the server re-sends a
+  // finished trade if your connection dropped at the wrong moment)
+  const trades = Array.isArray(w.trades) ? w.trades.filter((x) => typeof x === 'string' && x.length <= 20).slice(-20) : [];
+  return { coins, owned, paid, pity, packs, trades };
 }
 
 export function loadWallet(storage) {
@@ -174,4 +177,60 @@ export function ownedCount(wallet) {
     total += countOf(k);
   }
   return { have, total };
+}
+
+// ---------------------------------------------------------------- trading (server/trade.js has the other half)
+export const TRADE_MAX_ITEMS = 6;
+export const TRADE_MAX_COINS = 99999;
+
+// Free starter items are the same for everybody and trophy items must be earned, so neither can be traded.
+// Everything bought with coins (or pulled from a pack) can.
+export function isTradable(kind, index) {
+  if (!KINDS.includes(kind) || !Number.isInteger(index) || index < 0 || index >= countOf(kind)) return false;
+  const p = priceOf(kind, index);
+  return p !== 0 && p !== UNLOCK_ONLY;
+}
+
+function checkSide(list, what) {
+  if (!list || typeof list !== 'object') return `Bad ${what}.`;
+  const { coins, items } = list;
+  if (!Number.isInteger(coins) || coins < 0 || coins > TRADE_MAX_COINS) return `Coins must be 0 to ${TRADE_MAX_COINS}.`;
+  if (!Array.isArray(items) || items.length > TRADE_MAX_ITEMS) return `At most ${TRADE_MAX_ITEMS} items.`;
+  const seen = new Set();
+  for (const it of items) {
+    if (!it || !isTradable(it.kind, it.index)) return 'One of the items cannot be traded.';
+    const key = `${it.kind}:${it.index}`;
+    if (seen.has(key)) return 'The same item twice.';
+    seen.add(key);
+  }
+  return null;
+}
+
+// Can THIS wallet do this trade? Returns an error text, or null if it is fine.
+// give = what I hand over, get = what I receive; both { coins, items: [{kind, index}] }.
+export function checkTrade(wallet, give, get) {
+  const e1 = checkSide(give, 'offer');
+  if (e1) return e1;
+  const e2 = checkSide(get, 'offer');
+  if (e2) return e2;
+  if (wallet.coins < give.coins) return `You only have ${wallet.coins} coins.`;
+  if (wallet.coins - give.coins + get.coins > 999999) return 'That would be more coins than a wallet can hold.';
+  for (const it of give.items) if (!owns(wallet, it.kind, it.index)) return `You do not own ${nameOf(it.kind, it.index)}.`;
+  for (const it of get.items) if (owns(wallet, it.kind, it.index)) return `You already own ${nameOf(it.kind, it.index)}.`;
+  return null;
+}
+
+// Does the trade: my items and coins go, theirs arrive. Safe to call twice with the same trade id (the second
+// call does nothing). Returns { ok:true, repeat? } or { ok:false, error }.
+export function applyTrade(wallet, tradeId, give, get) {
+  if (typeof tradeId !== 'string' || !tradeId) return { ok: false, error: 'Bad trade.' };
+  if (wallet.trades.includes(tradeId)) return { ok: true, repeat: true };
+  const err = checkTrade(wallet, give, get);
+  if (err) return { ok: false, error: err };
+  wallet.coins = wallet.coins - give.coins + get.coins;
+  for (const it of give.items) wallet.owned[it.kind] = wallet.owned[it.kind].filter((i) => i !== it.index);
+  for (const it of get.items) grant(wallet, it.kind, it.index);
+  wallet.trades.push(tradeId);
+  if (wallet.trades.length > 20) wallet.trades.shift();
+  return { ok: true };
 }

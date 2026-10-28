@@ -4,7 +4,19 @@
 /* global io */
 // WebSocket first (lowest delay). Plain HTTP polling stays as a fallback for
 // networks that block websockets.
-export const socket = io({ transports: ['websocket', 'polling'] });
+// tryAllTransports: if the WebSocket cannot connect at all (some networks, VPNs and antivirus programs block it),
+// really DO fall back to polling. Without this option the client gives up after the first transport fails.
+export const socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
+
+// "websocket" (good), "polling" (works, but slower) or "none" (not connected) - for the F3 panel and warnings.
+export function transportName() {
+  try {
+    const e = socket.io && socket.io.engine;
+    return (e && e.transport && e.transport.name) || 'none';
+  } catch (err) {
+    return 'none';
+  }
+}
 
 // Send a message and wait for the server's answer (or a friendly timeout).
 // `onAnswer` (optional) runs immediately when the answer arrives, before any

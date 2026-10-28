@@ -15,6 +15,7 @@
 
 const { randomId, makeRoomCode, cleanName, randomSillyName, safeInt } = require('./util');
 const { encodeSnap } = require('./snapcodec');
+const { TradeBook } = require('./trade');
 const games = require('./games');
 const { roundReward, finalReward } = require('./rewards');
 const powerups = require('./powerups');
@@ -33,6 +34,7 @@ class Room {
     this.isPublic = false; // listed on the home page for anybody to join
     this.chat = []; // the last few chat messages (shown to people who join later)
     this.chatSeq = 0;
+    this.trades = new TradeBook(this); // coin + item trades between two players (server/trade.js)
     this.rage = false; // Rage Bait mode (see server/rage.js): the host switches it on in the lobby
     this.maxPlayers = cfg.MAX_PLAYERS; // the host can lower this in the lobby
     this.mapPick = 'random'; // the host's map choice: 'random' or a map id (see server/maps.js)
@@ -138,6 +140,7 @@ class Room {
     p.socketId = null;
     p.ready = false;
     p.disconnectedAt = Date.now();
+    this.trades.playerOffline(playerId);
     if (this.game && this.participants.has(playerId)) this.game.removePlayer(playerId);
     this.ensureHost();
     this.broadcastState();
@@ -145,6 +148,7 @@ class Room {
 
   removePlayer(playerId) {
     if (!this.players.has(playerId)) return;
+    this.trades.playerGone(playerId);
     if (this.game && this.participants.has(playerId)) this.game.removePlayer(playerId);
     this.players.delete(playerId);
     this.participants.delete(playerId);
@@ -483,6 +487,7 @@ class Room {
   // ------------------------------------------------------------------ loop
   // Called every server tick (before step) to move between phases.
   updatePhases(now) {
+    this.trades.tick(now);
     // Players who stayed disconnected too long lose their seat.
     for (const p of [...this.players.values()]) {
       if (!p.connected && now - p.disconnectedAt > this.cfg.RECONNECT_GRACE_MS) this.removePlayer(p.id);
@@ -512,20 +517,58 @@ class Room {
   }
 
   // Send the current world to everybody in the room.
+  // Players whose connection fell back to slow HTTP "long polling" (a network, VPN, school/work firewall or antivirus
+  // that blocks WebSockets). "Volatile" sending would throw almost every picture away for them (see below), so
+  // they get their own rules in flushSnapshot.
+  _pollingSockets() {
+    const out = [];
+    const map = this.io && this.io.sockets && this.io.sockets.sockets;
+    if (!map || typeof map.get !== 'function') return out;
+    for (const p of this.connectedPlayers()) {
+      const s = p.socketId ? map.get(p.socketId) : null;
+      const t = s && s.conn && s.conn.transport;
+      if (t && t.name === 'polling') out.push(s);
+    }
+    return out;
+  }
+
+  // A polling connection can only receive while the browser has a request open, so a "volatile" picture is
+  // usually dropped and the player sees NOTHING (just the background). Instead we send a picture whenever
+  // the previous one has been collected; if it has not, we skip (never pile up old pictures).
+  _sendSlow(sock, payload) {
+    const q = sock.conn && sock.conn.writeBuffer;
+    if (q && q.length > 0) return;
+    sock.emit('game:snap', payload);
+  }
+
   flushSnapshot() {
     if (this.phase !== 'playing' || !this.game) return;
+    const slow = this._pollingSockets();
+    const slowIds = new Set(slow.map((s) => s.id));
     // Games with secrets (Prop Hunt) send each player their own view.
     if (this.game.perViewer) {
       const people = this.connectedPlayers();
       const views = this.game.snapshotsByViewer(people.map((p) => p.id));
       for (const p of people) {
-        // volatile = if this player's connection is clogged, DROP the picture instead of queueing it
-        // (the next one comes in 33 ms anyway). Queued old pictures are what makes lag grow and grow.
-        if (p.socketId) this.io.to(p.socketId).volatile.emit('game:snap', encodeSnap(views.get(p.id) || views.get('*')));
+        if (!p.socketId) continue;
+        const payload = encodeSnap(views.get(p.id) || views.get('*'));
+        if (slowIds.has(p.socketId)) {
+          this._sendSlow(slow.find((s) => s.id === p.socketId), payload);
+        } else {
+          // volatile = if this player's connection is clogged, DROP the picture instead of queueing it
+          // (the next one comes in 33 ms anyway). Queued old pictures are what makes lag grow and grow.
+          this.io.to(p.socketId).volatile.emit('game:snap', payload);
+        }
       }
       return;
     }
-    this.io.to(this.code).volatile.emit('game:snap', encodeSnap(this.game.snapshot()));
+    const payload = encodeSnap(this.game.snapshot());
+    if (slow.length === 0) {
+      this.io.to(this.code).volatile.emit('game:snap', payload);
+      return;
+    }
+    this.io.to(this.code).except([...slowIds]).volatile.emit('game:snap', payload);
+    for (const s of slow) this._sendSlow(s, payload);
   }
 
   shouldClose(now) {
