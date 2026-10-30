@@ -415,6 +415,11 @@
           <input id="admin-announce-text" maxlength="120" placeholder="Announcement for everybody online (max 120 characters)" autocomplete="off">
           <button id="admin-announce-btn" class="btn small" type="button">Send</button>
         </div>
+        <div class="admin-announce">
+          <input id="admin-coins-amount" type="number" min="1" max="999999" step="1" value="1000" inputmode="numeric" aria-label="Coins to give">
+          <button id="admin-coins-btn" class="btn small" type="button">Give myself coins</button>
+          <span class="admin-hint">Gives coins to your own wallet. In a room below, "+coins" gives that same amount to one player.</span>
+        </div>
         <div id="admin-rooms" class="admin-rooms"></div>
         <div class="admin-foot"><button id="admin-logout" class="btn small ghost" type="button">Lock admin again</button></div>
       </div>

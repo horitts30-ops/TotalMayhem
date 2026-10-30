@@ -29,12 +29,14 @@ function connect(url) {
     s.state = null;
     s.emotes = [];
     s.announcements = [];
+    s.coinGifts = [];
     s.kicked = [];
     s.chat = [];
     s.chatEnabled = [];
     s.on('room:state', (st) => (s.state = st));
     s.on('chat:emoji', (m) => s.emotes.push(m));
     s.on('server:announce', (m) => s.announcements.push(m));
+    s.on('admin:coins', (m) => s.coinGifts.push(m));
     s.on('room:kicked', (m) => s.kicked.push(m));
     s.on('chat:msg', (m) => s.chat.push(m));
     s.on('chat:enabled', (m) => s.chatEnabled.push(m));
@@ -429,4 +431,59 @@ test('chat: the server admin can switch it off for everybody, and read a room\'s
     assert.equal((await ask(admin, 'admin:chatToggle', { on: true })).chatOn, true);
     assert.equal((await ask(a, 'chat:send', { text: 'back' })).ok, true);
   });
+});
+
+test('admin: the give-coins command is locked, validates the amount, and tells only the right browser', async () => {
+  await withServer({ ADMIN_CODE: 'open-sesame-9' }, async ({ mk }) => {
+    const host = await mk();
+    const guest = await mk();
+    const admin = await mk();
+    const { code } = await ask(host, 'room:create', { name: 'Hosty' });
+    const joined = await ask(guest, 'room:join', { code, name: 'Guesty' });
+    // nobody can use it before the code was accepted, not even for themselves
+    assert.equal((await ask(admin, 'admin:giveCoins', { amount: 500 })).ok, false);
+    assert.equal((await ask(host, 'admin:giveCoins', { amount: 500, code, playerId: joined.playerId })).ok, false);
+    await sleep(80);
+    assert.equal(admin.coinGifts.length + host.coinGifts.length + guest.coinGifts.length, 0, 'nothing sent without login');
+    await ask(admin, 'admin:login', { code: 'open-sesame-9' });
+    // bad amounts
+    for (const bad of [0, -5, 1.5, 1000000, NaN, 'lots', null, undefined, {}, [], '12']) {
+      assert.equal((await ask(admin, 'admin:giveCoins', { amount: bad })).ok, false, `amount ${JSON.stringify(bad)} refused`);
+    }
+    assert.equal((await ask(admin, 'admin:giveCoins', null)).ok, false);
+    await sleep(80);
+    assert.equal(admin.coinGifts.length, 0);
+    // coins for the admin
+    const mine = await ask(admin, 'admin:giveCoins', { amount: 1234 });
+    assert.deepEqual([mine.ok, mine.who], [true, 'you']);
+    await until(() => admin.coinGifts.length === 1, 2000, 'admin coins');
+    assert.deepEqual(admin.coinGifts[0], { amount: 1234 });
+    assert.equal(host.coinGifts.length + guest.coinGifts.length, 0, 'nobody else gets it');
+    // the largest allowed amount
+    assert.equal((await ask(admin, 'admin:giveCoins', { amount: 999999 })).ok, true);
+    // coins for one player of a room
+    const toGuest = await ask(admin, 'admin:giveCoins', { amount: 50, code, playerId: joined.playerId });
+    assert.deepEqual([toGuest.ok, toGuest.who], [true, 'Guesty']);
+    await until(() => guest.coinGifts.length === 1, 2000, 'guest coins');
+    assert.deepEqual(guest.coinGifts[0], { amount: 50 });
+    assert.equal(host.coinGifts.length, 0);
+    // unknown room / player
+    assert.equal((await ask(admin, 'admin:giveCoins', { amount: 5, code: 'ZZZZ', playerId: 'nobody' })).ok, false);
+    assert.equal((await ask(admin, 'admin:giveCoins', { amount: 5, code, playerId: 'nobody' })).ok, false);
+    assert.equal((await ask(admin, 'admin:giveCoins', { amount: 5, code, playerId: { x: 1 } })).ok, false);
+  });
+});
+
+test('admin: coins from the admin panel add to the wallet once, never past the wallet limit, and the panel has the controls', async () => {
+  const fs = require('node:fs');
+  const shop = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'shop.js')).href);
+  const w = shop.emptyWallet();
+  assert.equal(shop.credit(w, 1000, 'admin-a'), 1000);
+  assert.equal(shop.credit(w, 1000, 'admin-a'), 0, 'the same key is never paid twice');
+  assert.equal(shop.credit(w, 999999, 'admin-b'), 999999);
+  assert.equal(w.coins, 999999, 'capped at the wallet limit');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.ok(html.includes('id="admin-coins-amount"') && html.includes('id="admin-coins-btn"'));
+  const main = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'main.js'), 'utf8');
+  assert.ok(main.includes("socket.on('admin:coins'") && main.includes("request('admin:giveCoins'"));
 });

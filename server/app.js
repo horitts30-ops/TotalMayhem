@@ -348,6 +348,28 @@ function createGameServer(options = {}) {
         reply(ok ? { ok: true } : { ok: false, error: 'That room is already gone.' });
       })
     );
+    // Gives coins to the admin (no playerId) or to one player of a room. The wallet lives in the player's own browser,
+    // so the server cannot change it directly: it sends that browser a "you got N coins" message and the browser adds them.
+    on('admin:giveCoins', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const d = data && typeof data === 'object' ? data : {};
+        const amount = d.amount;
+        if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1 || amount > 999999) {
+          return reply({ ok: false, error: 'The amount must be a whole number from 1 to 999999.' });
+        }
+        if (d.playerId === undefined || d.playerId === null || d.playerId === '') {
+          socket.emit('admin:coins', { amount });
+          log(`[admin] gave ${amount} coins to the admin (${addr})`);
+          return reply({ ok: true, who: 'you' });
+        }
+        const room = manager.get(normalizeCode(d.code));
+        const player = room && typeof d.playerId === 'string' ? room.players.get(d.playerId) : null;
+        if (!player || !player.socketId || !player.connected) return reply({ ok: false, error: 'That player is not connected.' });
+        io.to(player.socketId).emit('admin:coins', { amount });
+        log(`[admin] gave ${amount} coins to ${player.name} in room ${room.code}`);
+        reply({ ok: true, who: player.name });
+      })
+    );
     on('admin:announce', (data, cb) =>
       adminOnly(cb, (reply) => {
         const text = cleanAnnouncement(data && data.text);

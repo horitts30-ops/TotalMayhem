@@ -1858,6 +1858,21 @@ socket.on('chat:emoji', (m) => {
 });
 
 let announceTimer = 0;
+// Coins sent by the admin panel (server/app.js admin:giveCoins). Added to THIS browser's wallet and saved.
+socket.on('admin:coins', (m) => {
+  const n = m && Number.isInteger(m.amount) ? m.amount : 0;
+  if (n < 1 || n > 999999) return;
+  const got = credit(S.wallet, n, `admin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+  if (!got) return;
+  saveWalletNow();
+  refreshPickers();
+  if (SHOP.open) renderShop();
+  if (PK.open) renderPacks();
+  if (TR.open) renderTrade();
+  toast(`+${got} coins!`);
+  sfx.coin(1);
+});
+
 socket.on('server:announce', (m) => {
   if (!m || typeof m.text !== 'string') return;
   const box = $('announce');
@@ -1886,6 +1901,10 @@ function adminShowMain(yes) {
     adminRefresh();
     adminTimer = setInterval(adminRefresh, 3000);
   }
+}
+
+function adminCoinsAmount() {
+  return Math.floor(Number($('admin-coins-amount').value));
 }
 
 async function adminRefresh() {
@@ -1948,6 +1967,14 @@ async function adminRefresh() {
         adminRefresh();
       });
       chip.appendChild(kick);
+      const give = el('button', null, '+coins');
+      give.type = 'button';
+      give.disabled = !p.connected;
+      give.addEventListener('click', async () => {
+        const res = await request('admin:giveCoins', { amount: adminCoinsAmount(), code: r.code, playerId: p.id });
+        toast(res && res.ok ? `Gave ${adminCoinsAmount()} coins to ${res.who}.` : (res && res.error) || 'Could not give coins.');
+      });
+      chip.appendChild(give);
       card.appendChild(chip);
     }
     box.appendChild(card);
@@ -1980,6 +2007,10 @@ function setupAdmin() {
     } else {
       $('admin-error').textContent = (res && res.error) || 'Could not check the code.';
     }
+  });
+  $('admin-coins-btn').addEventListener('click', async () => {
+    const res = await request('admin:giveCoins', { amount: adminCoinsAmount() });
+    if (!(res && res.ok)) toast((res && res.error) || 'Could not give coins.');
   });
   $('admin-chat-toggle').addEventListener('click', async () => {
     const turnOn = $('admin-chat-toggle').dataset.on !== '1';

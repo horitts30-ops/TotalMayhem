@@ -245,6 +245,9 @@ There is a small **Admin** link at the bottom of the title screen. It asks for a
   On a hosting website, add `ADMIN_CODE` in its environment-variables settings (never write the code into a file you upload or share).
 * **What it can do:** see the server's uptime, rooms, players, memory; see every room (host, phase, players, public/rage tags); **kick** a player; **close** a room;
   send an **announcement** that pops up for everybody online; **switch chat on/off** and read a room's chat. It never shows reconnect tokens.
+* **Give coins (v0.13.3):** type an amount (1 to 999,999) and press **Give myself coins**, or press **+coins** next to a connected player in a room to give them that amount.
+  The coins are added to that player's own saved wallet right away (they see "+2500 coins!"). Coins are only ever given, never taken, and each command is logged in the terminal.
+  Because wallets live in each player's browser, the server just tells that browser to add the coins; it needs the admin code like everything else in this panel.
 * **How it is protected:** the code is checked on the server in constant time; 5 wrong tries from one connection address lock it out for 5 minutes (twice as long the next
   time), and 30 wrong tries from anywhere lock everybody out for 10 minutes; admin rights last only for that browser connection (closing or reloading the page locks it again),
   and every admin action is checked on the server again. Anyone with the code has full admin powers, so keep it private. Admin actions are written to the server's terminal log.
@@ -547,7 +550,7 @@ Tick these off yourself (I tested the same flows with automated tests, but nothi
 npm test
 ```
 
-runs **371 automated tests** (about a minute and a half):
+runs **373 automated tests** (about a minute and a half):
 
 * `tests/game.test.js` (28 tests) - the Crumble Floor rules: standing, falling,
   **jumping over 2-tile holes (and failing to clear 3-tile ones)**, no falling while
@@ -613,7 +616,7 @@ runs **371 automated tests** (about a minute and a half):
 * `tests/trade.test.js` (13 tests) - the trade window over real sockets: ask / yes / offer / both accept / done, an accept on an old offer is refused, a failed commit cancels cleanly, same-room only,
   no-thanks / cancel / disconnect, request rate limit, junk messages, a lost "done" message being re-sent and applied only once, trades only in the lobby, and the wallet rules (items move, coins are
   conserved, you cannot give what you do not own, free and trophy items are not tradable).
-* `tests/social.test.js` (17 tests) - the Rage Bait room setting, emoji bubbles (valid, rate-limited, same-room only), the admin lock (wrong codes, lockouts, short or missing
+* `tests/social.test.js` (19 tests; the last two cover the admin give-coins command) - the Rage Bait room setting, emoji bubbles (valid, rate-limited, same-room only), the admin lock (wrong codes, lockouts, short or missing
   codes, no tokens leaked, kick/close/announce), and text chat (phases, filter, limits, history, admin switch).
 * `tests/network.test.js` (28 tests) - a real server with real WebSocket clients: rooms,
   joining, 8-player limit, host-only controls, a complete match from lobby to final
