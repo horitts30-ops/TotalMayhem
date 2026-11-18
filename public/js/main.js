@@ -10,7 +10,7 @@
 // referee; the browser only sends controls and draws what it is told.
 // ---------------------------------------------------------------------------
 
-import { socket, request, saveSession, loadSession, clearSession, transportName } from './net.js';
+import { socket, request, saveSession, loadSession, clearSession, transportName, fetchMaps } from './net.js';
 import { Renderer, drawPreview } from './renderer.js';
 import { Input } from './input.js';
 import { Predictor, walkableFor } from './predict.js';
@@ -385,8 +385,7 @@ let publicBusy = false;
 let MAP_LIST = [];
 async function loadMaps() {
   try {
-    const res = await fetch('/api/maps');
-    const list = await res.json();
+    const list = await fetchMaps();
     if (Array.isArray(list)) MAP_LIST = list.filter((m) => m && typeof m.id === 'string' && typeof m.name === 'string');
   } catch (e) {
     MAP_LIST = []; // no picker; the game still picks maps on its own

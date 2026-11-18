@@ -682,6 +682,8 @@ total-mayhem/
       paintPanic.js, colorCall.js, jumpRope.js, lapDash.js, digDash.js, moleStomp.js   the six newest games
     snapcodec.js          makes game snapshots ~40% smaller on the wire (public/js/snapcodec.js undoes it)
     stamina.js            the shared jump/shove stamina numbers and helpers
+    core.js               every message the browsers can send + the game loop (shared by both modes)
+    fakeio.js, hosting.js the Socket.IO stand-in and the in-browser host used on GitHub Pages
     static.js             serves the web files compressed (brotli/gzip) with safe caching headers
     trade.js              the trade window between two players (invite, offers, accept, two-step finish)
     maps.js               the 11 floor shapes, spawn points and centres (add a map here)
@@ -786,22 +788,48 @@ After changing a server file, stop the server (`Ctrl+C`) and run `npm start` aga
 
 ## 7. Getting friends in from the internet
 
-Right now the game runs on **your** computer, so only people on your Wi-Fi can
-reach it. To play with friends elsewhere you need the server running somewhere
-they can reach. I have **not** deployed it, so treat these as options to explore
-in Milestone 6, not as tested instructions:
+There are now **two ways** to run the game. The page picks the right one by itself.
 
-* **Quick tunnel (free, nothing to deploy):** keep `npm start` running and use a
-  tunnelling tool such as `cloudflared` or `ngrok` to get a public `https://...`
-  address that forwards to `localhost:3000`. Friends open that address. Your
-  computer must stay on while you play.
-* **Real hosting:** you need a host that runs a **Node.js server continuously and
-  supports WebSockets** (examples of the type: Render, Railway, Fly.io, or a small VPS).
-  Plain static hosts (GitHub Pages, plain Netlify/Vercel static sites) will **not** work,
-  because the game needs a live server. Some free tiers put the server to sleep when idle,
-  which makes the first load slow. Check current pricing and limits before choosing.
-  The server already reads the `PORT` environment variable that these hosts provide
-  and has a `/health` address for their health checks.
+### A) GitHub Pages (free, no server, no credit card)
+
+The whole game is plain files, so GitHub Pages can host it. There is no server: **the browser of whoever clicks
+"Create a room" becomes the game server**, and friends connect straight to that browser (WebRTC, using the free
+PeerJS matchmaker only to introduce the browsers to each other).
+
+**One-time setup (on github.com, no terminal):**
+
+1. Upload the project files to your repository (**Add file > Upload files**, drag everything in, **Commit changes**).
+2. Open the repository's **Settings > Pages**.
+3. Under **Build and deployment**, set **Source: Deploy from a branch**, **Branch: main**, folder **/ (root)**, then **Save**.
+4. Wait a minute or two. Your game is at `https://YOUR-NAME.github.io/TotalMayhem/` (it opens the `public/` folder for you).
+
+**To play:** open that address, click **Create a room**, and send the 4-letter code to your friends. They open the
+same address and type the code.
+
+What is different from running a real server:
+
+* **The host's tab IS the server.** If the host closes the tab or the computer sleeps, the room ends. Keep it open
+  (it can be in the background, but do not close it).
+* **No public room list and no Admin panel** (both need a real server, so they are hidden).
+* The host's computer and internet do the work, so 8 players works best when the host has a decent connection.
+* Some school/work networks and VPNs block WebRTC. If a friend cannot join, try another network or turn the VPN off.
+* A room code only works while the host's tab is open; refreshing the host's page ends the room.
+* Coins, skins and achievements are still saved in each player's own browser, as before.
+
+If you change anything in `server/`, rebuild the browser copy of the server and commit the result:
+`npm run build:host` (it rewrites `public/js/host.bundle.js`; `npm test` fails if it is out of date).
+You can try this mode on your own computer too: run `npm start` and open `http://localhost:3000/?p2p`.
+
+### B) A real Node server (Render, Railway, Fly.io, a small VPS, or your own computer)
+
+Also still supported: run `npm start` somewhere that stays on and supports WebSockets. The page notices the server
+and uses normal Socket.IO, with the public room list and the Admin panel. Add `?p2p` to the address to force the
+no-server mode, or `?server` to force this one.
+
+* **Quick tunnel (free):** keep `npm start` running and use a tunnelling tool such as `cloudflared` or `ngrok` to get a
+  public `https://...` address that forwards to `localhost:3000`. Your computer must stay on while you play.
+* **Real hosting:** needs a host that runs a Node.js server continuously and supports WebSockets. Some free tiers put the
+  server to sleep when idle. The server reads the `PORT` environment variable and has a `/health` address.
 
 ### About saving progress
 

@@ -636,9 +636,12 @@ class RoomManager {
     this.chatOn = cfg.CHAT_ENABLED !== false; // the server admin can switch chat off for everybody
   }
 
-  create() {
+  // `wantedCode` (optional) is used when the room code was already reserved elsewhere, for example by the
+  // in-browser host, whose code doubles as its WebRTC address.
+  create(wantedCode) {
     if (this.rooms.size >= this.cfg.MAX_ROOMS) return null;
-    const code = makeRoomCode((c) => this.rooms.has(c));
+    const ok = typeof wantedCode === 'string' && /^[A-Z]{4}$/.test(wantedCode) && !this.rooms.has(wantedCode);
+    const code = ok ? wantedCode : makeRoomCode((c) => this.rooms.has(c));
     if (!code) return null;
     const room = new Room(this.io, code, this.cfg, this.gameOptions);
     this.rooms.set(code, room);

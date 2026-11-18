@@ -1,0 +1,462 @@
+'use strict';
+
+// ---------------------------------------------------------------------------
+// The game "brain": every message the browsers can send, and the fixed-timestep game loop.
+//
+// It only needs something that looks like a Socket.IO server (`io`), so the very same code runs in two places:
+//   * server/app.js    - a real Node server with real Socket.IO (npm start)
+//   * server/fakeio.js - a tiny stand-in used when the game is hosted from inside a browser (GitHub Pages mode)
+//
+// Nothing here knows about HTTP, files or Node-only features.
+// ---------------------------------------------------------------------------
+
+const BASE_CONFIG = require('./config');
+const { RoomManager } = require('./room');
+const { normalizeCode, cleanName } = require('./util');
+const { AdminLock, cleanAnnouncement } = require('./admin');
+const { EMOTES } = require('./emotes');
+
+/**
+ * @param {object} args
+ * @param {object} args.io        Socket.IO server (or the browser stand-in)
+ * @param {object} [args.config]  overrides for server/config.js
+ * @param {Function} [args.log]
+ * @param {object} [args.gameOptions]
+ * @param {{canCreate?:Function, pickCode?:Function}} [args.hooks]  browser hosting: who may create a room, and which code it gets
+ */
+function createGameCore({ io, config, log = () => {}, gameOptions, hooks = {} }) {
+  const cfg = { ...BASE_CONFIG, ...(config || {}) };
+  const manager = new RoomManager(io, cfg, gameOptions);
+  const admin = new AdminLock(cfg.ADMIN_CODE);
+  const startedAt = Date.now();
+
+  // ------------------------------------------------------------- sockets
+  io.on('connection', (socket) => {
+    let windowStart = Date.now();
+    let windowCount = 0;
+
+    const lookup = () => {
+      const room = manager.get(socket.data.roomCode);
+      const player = room ? room.players.get(socket.data.playerId) : null;
+      if (!room || !player || player.socketId !== socket.id) return { room: null, player: null };
+      return { room, player };
+    };
+
+    // Wrap every handler so one bad message can never crash the server.
+    const on = (event, handler) => {
+      socket.on(event, (...args) => {
+        try {
+          handler(...args);
+        } catch (err) {
+          log(`[error] handler "${event}":`, err && err.message);
+          const cb = args[args.length - 1];
+          if (typeof cb === 'function') cb({ ok: false, error: 'Something went wrong on the server.' });
+        }
+      });
+    };
+    const cbOf = (cb) => (typeof cb === 'function' ? cb : () => {});
+
+    // Lets the game measure its own ping (shown with the F3 overlay).
+    socket.on('net:ping', (cb) => {
+      if (typeof cb === 'function') cb();
+    });
+
+    const leaveCurrentRoom = (remove) => {
+      const { room, player } = lookup();
+      if (room && player) {
+        if (remove) room.removePlayer(player.id);
+        else room.handleDisconnect(player.id);
+      }
+      if (socket.data.roomCode) socket.leave(socket.data.roomCode);
+      socket.data.roomCode = null;
+      socket.data.playerId = null;
+    };
+
+    const attach = (room, player) => {
+      room.markConnected(player, socket.id);
+      socket.data.roomCode = room.code;
+      socket.data.playerId = player.id;
+      socket.join(room.code);
+    };
+
+    on('room:create', (data, cb) => {
+      cb = cbOf(cb);
+      data = data && typeof data === 'object' ? data : {};
+      if (hooks.canCreate && !hooks.canCreate(socket)) return cb({ ok: false, error: 'Only the person hosting this game can create a room here.' });
+      if (socket.data.roomCode) leaveCurrentRoom(true);
+      const room = manager.create(hooks.pickCode ? hooks.pickCode(socket) : undefined);
+      if (!room) return cb({ ok: false, error: 'The server is busy right now. Please try again in a minute.' });
+      const player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin, back: data.back });
+      attach(room, player);
+      log(`[room ${room.code}] created by ${player.name}`);
+      cb({ ok: true, code: room.code, playerId: player.id, token: player.token });
+      room.broadcastState();
+    });
+
+    on('room:join', (data, cb) => {
+      cb = cbOf(cb);
+      data = data && typeof data === 'object' ? data : {};
+      const code = normalizeCode(data.code);
+      const room = manager.get(code);
+      if (code.length !== 4 || !room) return cb({ ok: false, error: `No room found with code "${code || '????'}". Check the code and try again.` });
+      if (socket.data.roomCode) leaveCurrentRoom(true);
+      let player;
+      try {
+        player = room.addPlayer({ name: data.name, color: data.color, hat: data.hat, skin: data.skin, back: data.back });
+      } catch (err) {
+        return cb({ ok: false, error: err.message });
+      }
+      attach(room, player);
+      log(`[room ${room.code}] ${player.name} joined (${room.players.size} players, phase: ${room.phase})`);
+      cb({ ok: true, code: room.code, playerId: player.id, token: player.token, lateJoin: room.phase !== 'lobby' && room.phase !== 'final' });
+      room.broadcastState();
+    });
+
+    on('room:rejoin', (data, cb) => {
+      cb = cbOf(cb);
+      data = data && typeof data === 'object' ? data : {};
+      const room = manager.get(normalizeCode(data.code));
+      const player = room ? room.findByToken(data.token) : null;
+      if (!room || !player) return cb({ ok: false, error: 'That room has ended.' });
+      if (player.socketId && player.socketId !== socket.id) {
+        const old = io.sockets.sockets.get(player.socketId);
+        if (old) {
+          old.leave(room.code);
+          old.data.roomCode = null;
+          old.data.playerId = null;
+          old.emit('room:kicked', { reason: 'You opened this game somewhere else.' });
+        }
+      }
+      attach(room, player);
+      log(`[room ${room.code}] ${player.name} reconnected`);
+      cb({ ok: true, code: room.code, playerId: player.id, token: player.token });
+      room.broadcastState();
+      room.trades.resend(player.id); // tells this browser about a trade it may have missed while offline
+    });
+
+    on('room:leave', (data, cb) => {
+      leaveCurrentRoom(true);
+      cbOf(cb)({ ok: true });
+    });
+
+    on('room:customize', (data) => {
+      const { room, player } = lookup();
+      if (!room) return;
+      room.setCustomization(player.id, {
+        name: data && data.name !== undefined ? cleanName(data.name) || undefined : undefined,
+        color: data && data.color,
+        hat: data && data.hat,
+        skin: data && data.skin,
+        back: data && data.back,
+      });
+    });
+
+    // Pit stop (power-up shop between rounds). The server owns the purse.
+    on('shop:buy', (id, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.buyPowerup(player.id, typeof id === 'string' ? id : '');
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('shop:refund', (id, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.refundPowerup(player.id, typeof id === 'string' ? id : '');
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('shop:done', (data) => {
+      const { room, player } = lookup();
+      if (room) room.setShopDone(player.id, data !== false);
+    });
+
+    on('room:ready', (data) => {
+      const { room, player } = lookup();
+      if (room) room.setReady(player.id, data === true || (data && data.ready === true));
+    });
+
+    on('room:public', (on_, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setPublic(player.id, on_ === true);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, isPublic: room.isPublic });
+    });
+
+    // The home page asks for the list of public rooms. Limited to a few asks
+    // per second so nobody can hammer the server with it.
+    let listWindow = 0;
+    let listCount = 0;
+    on('rooms:list', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const now = Date.now();
+      if (now - listWindow >= 2000) {
+        listWindow = now;
+        listCount = 0;
+      }
+      if (++listCount > 4) return cb({ ok: false, error: 'Slow down a little.' });
+      cb({ ok: true, rooms: manager.listPublic() });
+    });
+
+    // ---- trades between two players in a room (see server/trade.js) ----------------------------
+    // At most 20 trade messages per second from one connection, so nobody can flood the room.
+    let tradeWindow = 0;
+    let tradeCount = 0;
+    const tradeOk = () => {
+      const now = Date.now();
+      if (now - tradeWindow >= 1000) {
+        tradeWindow = now;
+        tradeCount = 0;
+      }
+      return ++tradeCount <= 20;
+    };
+    const tradeEvent = (event, run) => {
+      on(event, (data, cb) => {
+        cb = cbOf(typeof data === 'function' ? data : cb);
+        data = data && typeof data === 'object' ? data : {};
+        const { room, player } = lookup();
+        if (!room) return cb({ ok: false, error: 'Not in a room.' });
+        if (!tradeOk()) return cb({ ok: false, error: 'Slow down a little!' });
+        const err = run(room.trades, player.id, data);
+        cb(err ? { ok: false, error: err } : { ok: true });
+      });
+    };
+    tradeEvent('trade:request', (t, id, d) => t.request(id, d.to));
+    tradeEvent('trade:answer', (t, id, d) => t.answer(id, d.id, d.yes === true));
+    tradeEvent('trade:cancel', (t, id, d) => t.cancel(id, d.id));
+    tradeEvent('trade:offer', (t, id, d) => t.offer(id, d.id, { coins: d.coins, items: d.items }));
+    tradeEvent('trade:accept', (t, id, d) => t.accept(id, d.id, d.rev));
+    tradeEvent('trade:commit', (t, id, d) => t.commit(id, d.id, d.rev, d.ok));
+    tradeEvent('trade:ack', (t, id, d) => t.ack(id, d.id));
+    tradeEvent('trade:pending', (t, id) => t.resend(id));
+
+    // ---- emoji bubbles: a fixed list, one every 0.6 s per player ------------------------
+    let lastEmote = 0;
+    on('chat:emoji', (i) => {
+      const { room, player } = lookup();
+      if (!room) return;
+      const now = Date.now();
+      if (now - lastEmote < cfg.EMOTE_GAP_MS) return; // too fast: ignore
+      if (!Number.isInteger(i) || i < 0 || i >= EMOTES.length) return;
+      lastEmote = now;
+      io.to(room.code).emit('chat:emoji', { id: player.id, e: i });
+    });
+
+    // ---- text chat between rounds (see server/chat.js for the safety rules) ----------------
+    on('chat:send', (data, cb) => {
+      cb = cbOf(cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.postChat(player.id, data && typeof data === 'object' ? data.text : '', manager.chatOn);
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+    on('chat:history', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const { room } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      cb({ ok: true, messages: room.chat, enabled: manager.chatOn });
+    });
+
+    // ---- admin panel: nothing works until the secret code was accepted on THIS connection ----
+    const addr = socket.handshake && socket.handshake.address ? String(socket.handshake.address) : 'unknown';
+    const isAdmin = () => socket.data.admin === true;
+    const adminOnly = (cb, fn) => {
+      cb = cbOf(cb);
+      if (!isAdmin()) return cb({ ok: false, error: 'Not allowed.' });
+      return fn(cb);
+    };
+    on('admin:login', (data, cb) => {
+      cb = cbOf(cb);
+      const res = admin.attempt(addr, data && typeof data === 'object' ? data.code : '');
+      if (res.ok) {
+        socket.data.admin = true;
+        log(`[admin] login accepted (${addr})`);
+        return cb({ ok: true });
+      }
+      log(`[admin] WRONG code from ${addr}`);
+      cb({ ok: false, error: res.locked ? `Too many wrong tries. Try again in ${res.locked} seconds.` : 'That code is not right.', locked: res.locked || 0 });
+    });
+    on('admin:logout', (data, cb) => {
+      socket.data.admin = false;
+      cbOf(typeof data === 'function' ? data : cb)({ ok: true });
+    });
+    on('admin:status', (data, cb) =>
+      adminOnly(typeof data === 'function' ? data : cb, (reply) => {
+        const rooms = manager.overview();
+        let players = 0;
+        let connected = 0;
+        for (const r of manager.rooms.values()) {
+          players += r.players.size;
+          connected += r.connectedPlayers().length;
+        }
+        reply({
+          ok: true,
+          stats: {
+            uptimeSec: Math.round((Date.now() - startedAt) / 1000),
+            rooms: manager.rooms.size,
+            maxRooms: cfg.MAX_ROOMS,
+            players,
+            connected,
+            sockets: io.engine ? io.engine.clientsCount : 0,
+            memoryMB: typeof process !== 'undefined' && process.memoryUsage ? Math.round(process.memoryUsage().rss / 1048576) : 0,
+            node: typeof process !== 'undefined' && process.version ? process.version : 'browser',
+            chatOn: manager.chatOn,
+          },
+          rooms,
+        });
+      })
+    );
+    on('admin:chat', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const room = manager.get(normalizeCode(data && data.code));
+        reply(room ? { ok: true, messages: room.chat } : { ok: false, error: 'That room is gone.' });
+      })
+    );
+    on('admin:chatToggle', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        manager.chatOn = data && data.on === true;
+        log(`[admin] chat is now ${manager.chatOn ? 'ON' : 'OFF'}`);
+        io.emit('chat:enabled', { enabled: manager.chatOn });
+        reply({ ok: true, chatOn: manager.chatOn });
+      })
+    );
+    on('admin:kick', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const ok = manager.kickPlayer(normalizeCode(data && data.code), data && typeof data.playerId === 'string' ? data.playerId : '');
+        log(`[admin] kick ${data && data.code}/${data && data.playerId}: ${ok}`);
+        reply(ok ? { ok: true } : { ok: false, error: 'That player is no longer there.' });
+      })
+    );
+    on('admin:close', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const ok = manager.closeRoom(normalizeCode(data && data.code));
+        log(`[admin] close room ${data && data.code}: ${ok}`);
+        reply(ok ? { ok: true } : { ok: false, error: 'That room is already gone.' });
+      })
+    );
+    // Gives coins to the admin (no playerId) or to one player of a room. The wallet lives in the player's own browser,
+    // so the server cannot change it directly: it sends that browser a "you got N coins" message and the browser adds them.
+    on('admin:giveCoins', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const d = data && typeof data === 'object' ? data : {};
+        const amount = d.amount;
+        if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1 || amount > 999999) {
+          return reply({ ok: false, error: 'The amount must be a whole number from 1 to 999999.' });
+        }
+        if (d.playerId === undefined || d.playerId === null || d.playerId === '') {
+          socket.emit('admin:coins', { amount });
+          log(`[admin] gave ${amount} coins to the admin (${addr})`);
+          return reply({ ok: true, who: 'you' });
+        }
+        const room = manager.get(normalizeCode(d.code));
+        const player = room && typeof d.playerId === 'string' ? room.players.get(d.playerId) : null;
+        if (!player || !player.socketId || !player.connected) return reply({ ok: false, error: 'That player is not connected.' });
+        io.to(player.socketId).emit('admin:coins', { amount });
+        log(`[admin] gave ${amount} coins to ${player.name} in room ${room.code}`);
+        reply({ ok: true, who: player.name });
+      })
+    );
+    on('admin:announce', (data, cb) =>
+      adminOnly(cb, (reply) => {
+        const text = cleanAnnouncement(data && data.text);
+        if (!text) return reply({ ok: false, error: 'Write a message first.' });
+        io.emit('server:announce', { text });
+        log(`[admin] announcement: ${text}`);
+        reply({ ok: true });
+      })
+    );
+
+    on('room:rage', (on_, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setRage(player.id, on_ === true);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, rage: room.rage });
+    });
+
+    on('room:map', (pick, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setMap(player.id, typeof pick === 'string' ? pick.slice(0, 20) : '');
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, mapPick: room.mapPick });
+    });
+
+    on('room:max', (n, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setMaxPlayers(player.id, n);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true, maxPlayers: room.maxPlayers });
+    });
+
+    on('room:rounds', (n, cb) => {
+      const { room, player } = lookup();
+      if (!room) return cbOf(cb)({ ok: false, error: 'Not in a room.' });
+      const err = room.setRounds(player.id, n);
+      cbOf(cb)(err ? { ok: false, error: err } : { ok: true });
+    });
+
+    on('match:start', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.startMatch(player.id);
+      if (!err) log(`[room ${room.code}] match started (${room.rounds} rounds, ${room.connectedPlayers().length} players)`);
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+
+    on('match:toLobby', (data, cb) => {
+      cb = cbOf(typeof data === 'function' ? data : cb);
+      const { room, player } = lookup();
+      if (!room) return cb({ ok: false, error: 'Not in a room.' });
+      const err = room.backToLobby(player.id);
+      cb(err ? { ok: false, error: err } : { ok: true });
+    });
+
+    on('game:input', (data) => {
+      const now = Date.now();
+      if (now - windowStart >= 1000) {
+        windowStart = now;
+        windowCount = 0;
+      }
+      if (++windowCount > cfg.INPUT_RATE_LIMIT) return; // spam: ignore
+      const { room, player } = lookup();
+      if (room) room.setInput(player.id, data);
+    });
+
+    socket.on('disconnect', () => {
+      const { room, player } = lookup();
+      if (room && player) {
+        log(`[room ${room.code}] ${player.name} disconnected`);
+        room.handleDisconnect(player.id);
+      }
+    });
+  });
+
+  // ------------------------------------------------------------ game loop
+  // Fixed-timestep loop: the simulation always advances in equal slices so the
+  // game feels the same on every computer.
+  const STEP = 1 / cfg.TICK_RATE;
+  let last = Date.now();
+  let acc = 0;
+
+  function loop() {
+    const now = Date.now();
+    acc += Math.min(0.25, (now - last) / 1000);
+    last = now;
+    manager.update(now);
+    let stepped = false;
+    while (acc >= STEP) {
+      for (const room of manager.rooms.values()) room.step(STEP);
+      acc -= STEP;
+      stepped = true;
+    }
+    if (stepped) for (const room of manager.rooms.values()) room.flushSnapshot();
+  }
+
+  function resetClock() {
+    last = Date.now();
+  }
+
+  return { cfg, manager, admin, loop, resetClock, startedAt };
+}
+
+module.exports = { createGameCore };

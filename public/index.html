@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TOTAL MAYHEM</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%AA%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="style.css">
   <!-- If the game cannot start (blocked script, old browser, a browser extension, a broken cache...) this shows WHY on screen
        instead of leaving a blank page. main.js sets window.__tmBooted when it has started. -->
   <script>
@@ -53,19 +53,19 @@
   })();
   </script>
   <!-- fetch every script in parallel instead of one after another -->
-  <link rel="modulepreload" href="/js/main.js">
-  <link rel="modulepreload" href="/js/renderer.js">
-  <link rel="modulepreload" href="/js/wardrobe.js">
-  <link rel="modulepreload" href="/js/shop.js">
-  <link rel="modulepreload" href="/js/packs.js">
-  <link rel="modulepreload" href="/js/constants.js">
-  <link rel="modulepreload" href="/js/achievements.js">
-  <link rel="modulepreload" href="/js/audio.js">
-  <link rel="modulepreload" href="/js/music.js">
-  <link rel="modulepreload" href="/js/input.js">
-  <link rel="modulepreload" href="/js/net.js">
-  <link rel="modulepreload" href="/js/predict.js">
-  <link rel="modulepreload" href="/js/snapcodec.js">
+  <link rel="modulepreload" href="js/main.js">
+  <link rel="modulepreload" href="js/renderer.js">
+  <link rel="modulepreload" href="js/wardrobe.js">
+  <link rel="modulepreload" href="js/shop.js">
+  <link rel="modulepreload" href="js/packs.js">
+  <link rel="modulepreload" href="js/constants.js">
+  <link rel="modulepreload" href="js/achievements.js">
+  <link rel="modulepreload" href="js/audio.js">
+  <link rel="modulepreload" href="js/music.js">
+  <link rel="modulepreload" href="js/input.js">
+  <link rel="modulepreload" href="js/net.js">
+  <link rel="modulepreload" href="js/predict.js">
+  <link rel="modulepreload" href="js/snapcodec.js">
 </head>
 <body>
 
@@ -111,7 +111,7 @@
             <button id="btn-join" class="btn">Join</button>
           </div>
           <div id="title-error" class="error" role="alert"></div>
-        <div class="public-box">
+        <div class="public-box server-only">
           <div class="public-head">
             <b>Public rooms</b>
             <button id="public-refresh" class="mini" type="button" aria-label="Refresh the list" title="Refresh">&#8635;</button>
@@ -127,7 +127,7 @@
         <span><b>E</b>/<b>Shift</b> shove</span>
         <span><b>1-8</b> emoji</span>
       </div>
-      <button id="admin-link" class="admin-link" type="button">Admin</button>
+      <button id="admin-link" class="admin-link server-only" type="button">Admin</button>
     </div>
   </section>
 
@@ -174,7 +174,7 @@
         <label id="rage-wrap" class="inline-field check rage" title="Much stronger shoves and much harder minigames. Everybody in the room plays by the same rules.">
           <input type="checkbox" id="rage-check"> &#128293; Rage Bait
         </label>
-        <label id="public-wrap" class="inline-field check" title="Show this room on the home page so anybody can join">
+        <label id="public-wrap" class="inline-field check server-only" title="Show this room on the home page so anybody can join">
           <input type="checkbox" id="public-check"> Public room
         </label>
         <label id="map-wrap" class="inline-field hidden" title="The floor shape for the minigames that use maps (not every minigame does)">Map
@@ -190,6 +190,7 @@
         <button id="btn-start" class="btn big">Start match</button>
       </div>
       <div id="lobby-hint" class="hint"></div>
+      <div class="hint p2p-only">This room lives in the host's browser. If the host closes their tab, the room ends.</div>
       <div id="lobby-error" class="error" role="alert"></div>
     </div>
   </section>
@@ -450,8 +451,7 @@
   <button id="music-btn" class="mute music" title="Music on / off (N)" aria-label="Toggle music">&#127925;</button>
   <button id="mute-btn" class="mute" title="Mute / unmute all sound (M)" aria-label="Toggle sound">&#128266;</button>
 
-  <script defer src="/socket.io/socket.io.js"></script>
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="js/main.js"></script>
   <div id="perf-hud" class="hidden"></div>
 </body>
 </html>

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:host": "esbuild build/host-entry.mjs --bundle --format=esm --platform=browser --target=es2020 --minify --alias:crypto=./build/crypto-shim.js --define:process.env.PORT=undefined --define:process.env.ADMIN_CODE=undefined --outfile=public/js/host.bundle.js"
   },
   "engines": {
     "node": ">=18"
@@ -17,6 +18,7 @@
     "socket.io": "^4.8.0"
   },
   "devDependencies": {
+    "esbuild": "^0.24.2",
     "socket.io-client": "^4.8.0"
   }
 }
